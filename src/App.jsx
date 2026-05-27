@@ -9,7 +9,25 @@ const DAY_COLORS = [
   "#ff8888", "#aaaaff"
 ];
 
-function makeIcon(label, color) {
+const STOP_TYPES = ["activity", "flight", "hotel", "food"];
+
+const TYPE_ICON = {
+  activity: null,
+  flight: "✈️",
+  hotel: "🏨",
+  food: "🍜",
+};
+
+function makeIcon(label, color, type) {
+  const icon =
+    type === "flight"
+      ? "✈️"
+      : type === "hotel"
+      ? "🏨"
+      : type === "food"
+      ? "🍜"
+      : label;
+
   return L.divIcon({
     html: `
       <div style="
@@ -22,11 +40,13 @@ function makeIcon(label, color) {
         display:flex;
         align-items:center;
         justify-content:center;
-        font-size:9px;
+        font-size:12px;
         font-weight:700;
         border:2px solid rgba(0,0,0,0.25)
       ">
-        <span style="transform:rotate(45deg)">${label}</span>
+        <span style="transform:rotate(45deg)">
+          ${icon}
+        </span>
       </div>
     `,
     className: "",
@@ -74,7 +94,7 @@ function save(data) {
   localStorage.setItem("tripplanner", JSON.stringify(data));
 }
 
-function addDays(dateStr, n) {
+function addDaysToDate(dateStr, n) {
   const d = new Date(dateStr);
   d.setDate(d.getDate() + n);
   return d.toISOString().split("T")[0];
@@ -82,24 +102,33 @@ function addDays(dateStr, n) {
 
 function reindexPins(days, pins) {
   if (!days || !pins) return [];
-  const orderedIds = days.flatMap((day) => {
-    if (!day?.stops) return [];
+  let counter = 1;
+  const labelMap = {};
+  days.forEach((day) => {
+    if (!day?.stops) return;
     const dayPins = day.stops
       .map((sid) => pins.find((p) => p.id === sid))
       .filter(Boolean)
       .sort((a, b) => (a.time || "00:00").localeCompare(b.time || "00:00"));
-    return dayPins.map((p) => p.id);
+    dayPins.forEach((p) => {
+      if (!p.type || p.type === "activity") {
+        labelMap[p.id] = String(counter++);
+      } else {
+        labelMap[p.id] = TYPE_ICON[p.type] || "?";
+      }
+    });
   });
-  return pins.map((pin) => {
-    const pos = orderedIds.indexOf(pin.id);
-    return { ...pin, label: pos >= 0 ? String(pos + 1) : "?" };
-  });
+  return pins.map((pin) => ({
+    ...pin,
+    label: labelMap[pin.id] ?? "?",
+  }));
 }
 
 export default function App() {
   const saved = load();
 
   const [tripName, setTripName] = useState(saved?.tripName || "Japan 2025");
+  const [editingTitle, setEditingTitle] = useState(false);
   const [days, setDays] = useState(
     saved?.days || [
       { id: 1, label: "Day 1", date: "2025-09-01", stops: [] },
@@ -115,6 +144,7 @@ export default function App() {
   const [popupName, setPopupName] = useState("");
   const [popupDay, setPopupDay] = useState(null);
   const [popupTime, setPopupTime] = useState("09:00");
+  const [popupType, setPopupType] = useState("");
   const [wishlist, setWishlist] = useState(saved?.wishlist || []);
   const [showRoute, setShowRoute] = useState(false);
 
@@ -129,9 +159,17 @@ export default function App() {
   const routeLinesRef = useRef([]);
   const daysRef = useRef(days);
   const pinsRef = useRef(pins);
+  const titleInputRef = useRef(null);
 
   useEffect(() => { daysRef.current = days; }, [days]);
   useEffect(() => { pinsRef.current = pins; }, [pins]);
+
+  useEffect(() => {
+    if (editingTitle && titleInputRef.current) {
+      titleInputRef.current.focus();
+      titleInputRef.current.select();
+    }
+  }, [editingTitle]);
 
   useEffect(() => {
     save({ tripName, days, pins, nextDayId, nextPinId, wishlist });
@@ -144,12 +182,11 @@ export default function App() {
       if (markersRef.current[pin.id] && pin.lat !== null) {
         const dayIdx = days.findIndex((d) => d.id === pin.dayId);
         const color = DAY_COLORS[dayIdx % DAY_COLORS.length];
-        markersRef.current[pin.id].setIcon(makeIcon(pin.label, color));
+        markersRef.current[pin.id].setIcon(makeIcon(pin.label, color, pin.type));
       }
     });
   }, [pins, days]);
 
-  // Draw / clear route lines
   useEffect(() => {
     if (!leafletMap.current) return;
     routeLinesRef.current.forEach((l) => l.remove());
@@ -186,6 +223,7 @@ export default function App() {
       const lng = +e.latlng.lng.toFixed(4);
       setPending({ lat, lng });
       setPopupTime("09:00");
+      setPopupType("");
       setPopupDay(daysRef.current[0]?.id ?? null);
       setPopupName("Loading...");
       try {
@@ -268,7 +306,7 @@ export default function App() {
     const dayIdx = currentDays.findIndex((d) => d.id === pin.dayId);
     const color = DAY_COLORS[dayIdx % DAY_COLORS.length];
     const marker = L.marker([pin.lat, pin.lng], {
-      icon: makeIcon(pin.label, color),
+      icon: makeIcon(pin.label, color, pin.type),
     });
     marker.on("click", () => {
       setHighlighted(pin.id);
@@ -287,7 +325,9 @@ export default function App() {
       label: "?",
       name,
       time: popupTime,
+      type: popupType || "activity",
       notes: "",
+      cost: "",
       lat: pending.lat,
       lng: pending.lng,
       dayId,
@@ -327,7 +367,7 @@ export default function App() {
   function addDay() {
     const lastDay = days[days.length - 1];
     const newDate = lastDay
-      ? addDays(lastDay.date, 1)
+      ? addDaysToDate(lastDay.date, 1)
       : new Date().toISOString().split("T")[0];
     const n = days.length + 1;
     setDays([
@@ -349,14 +389,16 @@ export default function App() {
     setDays((ds) => ds.filter((d) => d.id !== dayId));
   }
 
-  function addManualStop(dayId, name, time) {
+  function addManualStop(dayId, name, time, type) {
     if (!name.trim()) return;
     const pin = {
       id: nextPinId,
       label: "?",
       name: name.trim(),
       time: time || "09:00",
+      type: type || "",
       notes: "",
+      cost: "",
       lat: null,
       lng: null,
       dayId,
@@ -375,8 +417,29 @@ export default function App() {
     setPins(reindexPins(days, updatedPins));
   }
 
+  function updateStopName(pinId, name) {
+    setPins((ps) => ps.map((p) => (p.id === pinId ? { ...p, name } : p)));
+  }
+
   function updateStopNotes(pinId, notes) {
     setPins((ps) => ps.map((p) => (p.id === pinId ? { ...p, notes } : p)));
+  }
+
+  function updateStopCost(pinId, cost) {
+    setPins((ps) => ps.map((p) => (p.id === pinId ? { ...p, cost } : p)));
+  }
+
+  function updateStopType(pinId, type) {
+    const updatedPins = pins.map((p) => (p.id === pinId ? { ...p, type } : p));
+    const reindexed = reindexPins(days, updatedPins);
+    setPins(reindexed);
+    // Update marker icon
+    const pin = reindexed.find((p) => p.id === pinId);
+    if (pin && pin.lat !== null && markersRef.current[pinId]) {
+      const dayIdx = days.findIndex((d) => d.id === pin.dayId);
+      const color = DAY_COLORS[dayIdx % DAY_COLORS.length];
+      markersRef.current[pinId].setIcon(makeIcon(pin.label, color, pin.type));
+    }
   }
 
   function focusPin(pinId) {
@@ -420,6 +483,7 @@ export default function App() {
     setPending({ lat, lng });
     setPopupName(shortName);
     setPopupTime("09:00");
+    setPopupType("");
     setPopupDay(daysRef.current[0]?.id ?? null);
     setSearchResults([]);
     setSearchQuery("");
@@ -429,13 +493,35 @@ export default function App() {
     <div className="app">
       <div className="sidebar">
         <div className="sidebar-header">
-          <div className="app-title">✈ Trip Planner</div>
-          <input
-            className="trip-name-input"
-            value={tripName}
-            onChange={(e) => setTripName(e.target.value)}
-            placeholder="Name your trip..."
-          />
+          {editingTitle ? (
+            <input
+              ref={titleInputRef}
+              className="title-edit-input"
+              value={tripName}
+              onChange={(e) => setTripName(e.target.value)}
+              onBlur={() => setEditingTitle(false)}
+              onKeyDown={(e) => e.key === "Enter" && setEditingTitle(false)}
+            />
+          ) : (
+            <div className="title-row">
+              <div className="app-title">{tripName}</div>
+              <button className="title-edit-btn" onClick={() => setEditingTitle(true)} title="Edit trip name">
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M12 20h9" />
+                  <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                </svg>
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="tabs">
@@ -446,10 +532,10 @@ export default function App() {
             Itinerary
           </button>
           <button
-            className={`tab${tab === "pins" ? " active" : ""}`}
-            onClick={() => setTab("pins")}
+            className={`tab${tab === "costs" ? " active" : ""}`}
+            onClick={() => setTab("costs")}
           >
-            All Pins
+            Costs
           </button>
         </div>
 
@@ -468,9 +554,11 @@ export default function App() {
                   onDateChange={(date) =>
                     setDays(days.map((d) => (d.id === day.id ? { ...d, date } : d)))
                   }
-                  onAddStop={(name, time) => addManualStop(day.id, name, time)}
+                  onAddStop={(name, time, type) => addManualStop(day.id, name, time, type)}
                   onTimeChange={updateStopTime}
+                  onNameChange={updateStopName}
                   onNotesChange={updateStopNotes}
+                  onTypeChange={updateStopType}
                 />
               ))}
               <button className="add-day-btn" onClick={addDay}>
@@ -478,11 +566,10 @@ export default function App() {
               </button>
             </>
           ) : (
-            <PinsTab
+            <CostsTab
               pins={pins}
               days={days}
-              onFocus={focusPin}
-              onRemove={removePin}
+              onCostChange={updateStopCost}
             />
           )}
         </div>
@@ -568,6 +655,22 @@ export default function App() {
                 onChange={(e) => setPopupTime(e.target.value)}
               />
             </div>
+            <div className="pin-popup-row">
+              <label className="pin-popup-label">Type</label>
+              <select
+                className="pin-popup-select"
+                value={popupType}
+                onChange={(e) => setPopupType(e.target.value)}
+              >
+                <option value="">Add Label</option>
+
+                {STOP_TYPES.map((t) => (
+                  <option key={t} value={t}>
+                    {t.charAt(0).toUpperCase() + t.slice(1)}
+                  </option>
+                ))}
+              </select>
+            </div>
             <select
               className="pin-popup-select"
               value={popupDay ?? ""}
@@ -598,19 +701,15 @@ export default function App() {
 }
 
 function DayBlock({
-  day,
-  pins,
-  highlighted,
-  onFocus,
-  onRemovePin,
-  onRemoveDay,
-  onDateChange,
-  onAddStop,
-  onTimeChange,
-  onNotesChange,
+  day, pins, highlighted,
+  onFocus, onRemovePin, onRemoveDay,
+  onDateChange, onAddStop,
+  onTimeChange, onNameChange, onNotesChange, onTypeChange,
 }) {
   const [input, setInput] = useState("");
   const [time, setTime] = useState("09:00");
+  const [type, setType] = useState("");
+  const [editingId, setEditingId] = useState(null);
 
   const stops = (day.stops || [])
     .map((sid) => pins.find((p) => p.id === sid))
@@ -644,12 +743,59 @@ function DayBlock({
             className={`stop-item${highlighted === s.id ? " highlighted" : ""}`}
             onClick={() => onFocus(s.id)}
           >
-            <div className="stop-num">{s.label}</div>
+            <div className="stop-num">
+              {s.type === "flight"
+                ? "✈️"
+                : s.type === "hotel"
+                ? "🏨"
+                : s.type === "food"
+                ? "🍜"
+                : s.label}
+            </div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div className="stop-name">{s.name}</div>
+              {editingId === s.id ? (
+                <input
+                  className="stop-name-input"
+                  autoFocus
+                  value={s.name}
+                  onClick={(e) => e.stopPropagation()}
+                  onChange={(e) => {
+                    e.stopPropagation();
+                    onNameChange(s.id, e.target.value);
+                  }}
+                  onBlur={() => setEditingId(null)}
+                  onKeyDown={(e) => e.key === "Enter" && setEditingId(null)}
+                />
+              ) : (
+                <div
+                  className="stop-name"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setEditingId(s.id);
+                  }}
+                  title="Click to edit name"
+                >
+                  {s.name}
+                  <span className="stop-name-edit-hint">
+                    <svg
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M12 20h9" />
+                      <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                    </svg>
+                  </span>
+                </div>
+              )}
               <div className="stop-meta">
                 <input
-                  className="time-input"
+                  className="time-input no-cutoff"
                   type="time"
                   value={s.time || "09:00"}
                   onClick={(e) => e.stopPropagation()}
@@ -658,6 +804,24 @@ function DayBlock({
                     onTimeChange(s.id, e.target.value);
                   }}
                 />
+                <select
+                  className="type-select"
+                  value={s.type || ""}
+                  required
+                  onClick={(e) => e.stopPropagation()}
+                  onChange={(e) => {
+                    e.stopPropagation();
+                    onTypeChange(s.id, e.target.value);
+                  }}
+                >
+                  <option value="">Add Label</option>
+
+                  {STOP_TYPES.map((t) => (
+                    <option key={t} value={t}>
+                      {t.charAt(0).toUpperCase() + t.slice(1)}
+                    </option>
+                  ))}
+                </select>
               </div>
               <textarea
                 className="stop-notes"
@@ -692,7 +856,7 @@ function DayBlock({
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter") {
-              onAddStop(input, time);
+              onAddStop(input, time, type);
               setInput("");
             }
           }}
@@ -703,10 +867,24 @@ function DayBlock({
           value={time}
           onChange={(e) => setTime(e.target.value)}
         />
+        <select
+          className="add-type-select"
+          value={type}
+          required
+          onChange={(e) => setType(e.target.value)}
+        >
+          <option value="">Add Label</option>
+
+          {STOP_TYPES.map((t) => (
+            <option key={t} value={t}>
+              {t.charAt(0).toUpperCase() + t.slice(1)}
+            </option>
+          ))}
+        </select>
         <button
           className="btn-add"
           onClick={() => {
-            onAddStop(input, time);
+            onAddStop(input, time, type);
             setInput("");
           }}
         >
@@ -717,41 +895,74 @@ function DayBlock({
   );
 }
 
-function PinsTab({ pins, days, onFocus, onRemove }) {
-  if (!pins.length) {
-    return (
-      <div className="hint">
-        <span>Click anywhere on the map</span> to drop a pin and assign it to a day.
-      </div>
-    );
+function CostsTab({ pins, days, onCostChange }) {
+  const groups = { flight: [], hotel: [], activity: [] };
+
+  days.forEach((day) => {
+    (day.stops || []).forEach((sid) => {
+      const pin = pins.find((p) => p.id === sid);
+      if (!pin) return;
+      const t = pin.type || "activity";
+      if (groups[t]) groups[t].push({ ...pin, dayLabel: day.label });
+    });
+  });
+
+  const typeLabels = { flight: "✈ Flights", hotel: "🏨 Hotels", activity: "🎯 Activities" };
+
+  function subtotal(arr) {
+    return arr.reduce((sum, p) => sum + (parseFloat(p.cost) || 0), 0);
   }
 
+  const grandTotal =
+    subtotal(groups.flight) +
+    subtotal(groups.hotel) +
+    subtotal(groups.activity);
+
   return (
-    <div className="pins-list">
-      {pins.map((pin) => {
-        const day = days.find((d) => d.id === pin.dayId);
-        return (
-          <div key={pin.id} className="pin-item" onClick={() => onFocus(pin.id)}>
-            <div className="pin-num">{pin.label}</div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div className="pin-name">{pin.name}</div>
-              <div className="pin-coords">
-                {day?.label ?? "?"} · {pin.time}
-                {pin.notes ? ` · ${pin.notes}` : ""}
-              </div>
-            </div>
-            <button
-              className="stop-remove"
-              onClick={(e) => {
-                e.stopPropagation();
-                onRemove(pin.id);
-              }}
-            >
-              ✕
-            </button>
+    <div className="costs-tab">
+      {Object.entries(groups).map(([type, items]) => (
+        <div key={type} className="cost-group">
+          <div className="cost-group-header">
+            <span>{typeLabels[type]}</span>
+            <span className="cost-subtotal">${subtotal(items).toFixed(2)}</span>
           </div>
-        );
-      })}
+          {items.length === 0 ? (
+            <div className="cost-empty">No {type}s added yet</div>
+          ) : (
+            <table className="cost-table">
+              <tbody>
+                {items.map((pin) => (
+                  <tr key={pin.id} className="cost-row">
+                    <td className="cost-name">
+                      <div>{pin.name}</div>
+                      <div className="cost-day-label">{pin.dayLabel}</div>
+                    </td>
+                    <td className="cost-input-cell">
+                      <div className="cost-input-wrap">
+                        <span className="cost-dollar">$</span>
+                        <input
+                          className="cost-input"
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          placeholder="0.00"
+                          value={pin.cost || ""}
+                          onChange={(e) => onCostChange(pin.id, e.target.value)}
+                        />
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      ))}
+
+      <div className="cost-total-row">
+        <span>Total</span>
+        <span>${grandTotal.toFixed(2)}</span>
+      </div>
     </div>
   );
 }

@@ -27,12 +27,13 @@ body {
 
 .app {
   display: grid;
-  grid-template-columns: 360px 1fr;
+  grid-template-columns: 580px 1fr;
   height: 100vh;
   overflow: hidden;
 }
 
-/* SIDEBAR */
+/* ─── SIDEBAR ─────────────────────────────────────────── */
+
 .sidebar {
   background: var(--surface);
   border-right: 1px solid var(--border);
@@ -47,35 +48,66 @@ body {
   flex-shrink: 0;
 }
 
+/* Title row: title text + edit pen button side by side */
+.title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .app-title {
-  font-size: 14px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  color: var(--accent);
-  text-transform: uppercase;
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  color: #c478ea;
+  line-height: 1.2;
 }
 
-.trip-name-input {
-  margin-top: 10px;
-  width: 100%;
-  background: var(--surface2);
-  border: 1px solid var(--border2);
-  border-radius: 8px;
-  padding: 8px 12px;
-  color: var(--text);
-  font-size: 16px;
-  font-weight: 500;
-  font-family: inherit;
-  outline: none;
-}
+.title-edit-btn {
+  width: 26px;
+  height: 26px;
 
-.trip-name-input:focus {
-  border-color: var(--accent);
-}
+  display: flex;
+  align-items: center;
+  justify-content: center;
 
-.trip-name-input::placeholder {
+  background: rgba(255,255,255,0.04);
+
+  border: 1px solid transparent;
+  border-radius: 7px;
+
+  cursor: pointer;
+
   color: var(--muted);
+
+  transition:
+    background 0.15s,
+    border-color 0.15s,
+    color 0.15s;
 }
+
+.title-edit-btn:hover {
+  background: rgba(200,245,90,0.08);
+  border-color: rgba(200,245,90,0.25);
+  color: var(--accent);
+}
+
+/* Inline editing input that replaces the title */
+.title-edit-input {
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  color: #c478ea;
+  background: none;
+  border: none;
+  border-bottom: 2px solid var(--accent);
+  outline: none;
+  font-family: inherit;
+  width: 100%;
+  padding-bottom: 2px;
+}
+
+/* ─── TABS ─────────────────────────────────────────────── */
 
 .tabs {
   display: flex;
@@ -103,6 +135,8 @@ body {
   border-bottom-color: var(--accent);
 }
 
+/* ─── SIDEBAR BODY ─────────────────────────────────────── */
+
 .sidebar-body {
   flex: 1;
   overflow-y: auto;
@@ -113,7 +147,8 @@ body {
   scrollbar-color: var(--border2) transparent;
 }
 
-/* DAY BLOCKS */
+/* ─── DAY BLOCKS ───────────────────────────────────────── */
+
 .day-block {
   margin-bottom: 14px;
   background: var(--surface2);
@@ -165,6 +200,8 @@ body {
   color: var(--danger);
 }
 
+/* ─── STOPS LIST ───────────────────────────────────────── */
+
 .stops-list {
   padding: 0 12px 8px;
   display: flex;
@@ -194,8 +231,8 @@ body {
 }
 
 .stop-num {
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
   background: var(--accent);
   color: var(--accent-text);
@@ -208,17 +245,140 @@ body {
   margin-top: 2px;
 }
 
+/* Stop name — clickable to edit */
 .stop-name {
   font-size: 13px;
   font-weight: 500;
+  cursor: text;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.stop-name-edit-hint {
+  font-size: 10px;
+  color: var(--muted);
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.stop-item:hover .stop-name-edit-hint {
+  opacity: 1;
+}
+
+/* Inline name edit input */
+.stop-name-input {
+  font-size: 13px;
+  font-weight: 500;
+  font-family: inherit;
+  color: var(--text);
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--accent);
+  outline: none;
+  width: 100%;
+  padding: 0;
 }
 
 .stop-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: 11px;
   color: var(--muted);
-  margin-top: 2px;
+  margin-top: 4px;
+  /* don't wrap — time + type select must stay on one line */
+  flex-wrap: nowrap;
+  overflow: hidden;
 }
 
+/* Time inline input inside stop meta */
+.time-input {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 11px;
+  font-family: 'DM Mono', monospace;
+  outline: none;
+  cursor: pointer;
+  padding: 0;
+  
+  width: 118px;
+  min-width: 118px;
+
+  flex-shrink: 0;
+  letter-spacing: 0.02em;
+}
+
+.time-input:hover {
+  color: var(--accent);
+}
+
+/* Type select inside stop meta — styled pill, not a raw dropdown */
+.type-select {
+  background: #2a2a36;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 999px;
+
+  color: #f2f2f2;
+
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+
+  font-family: inherit;
+
+  outline: none;
+
+  padding: 4px 26px 4px 10px;
+
+  cursor: pointer;
+
+  appearance: none;
+  -webkit-appearance: none;
+
+  transition:
+    border-color 0.15s,
+    background 0.15s,
+    color 0.15s;
+
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'%3E%3Cpath d='M0 0l4 5 4-5z' fill='%23cccccc'/%3E%3C/svg%3E");
+
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+}
+
+.type-select option {
+  background: #1f1f28;
+  color: #f2f2f2;
+}
+
+.type-select:invalid {
+  color: #888794;
+}
+
+.type-select:hover {
+  border-color: rgba(200,245,90,0.4);
+  background: rgba(200,245,90,0.08);
+  color: var(--accent);
+}
+
+.type-select:focus {
+  border-color: var(--accent);
+}
+
+.type-select:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.type-select:focus {
+  border-color: var(--accent);
+}
+
+/* Notes textarea inside stop */
 .stop-notes {
   background: none;
   border: none;
@@ -265,6 +425,8 @@ body {
   padding: 4px 2px;
 }
 
+/* ─── ADD STOP ROW ─────────────────────────────────────── */
+
 .add-stop-row {
   padding: 0 12px 12px;
   display: flex;
@@ -300,11 +462,33 @@ body {
   font-size: 12px;
   font-family: inherit;
   outline: none;
-  width: 110px;
+  width: 100px;
 }
 
 .add-time-input:focus {
   border-color: var(--accent);
+}
+
+/* Type dropdown in add row */
+.add-type-select {
+  background: var(--surface);
+  border: 1px solid var(--border2);
+  border-radius: 8px;
+  padding: 7px 6px;
+  color: var(--text);
+  font-size: 12px;
+  font-family: inherit;
+  outline: none;
+  cursor: pointer;
+}
+
+.add-type-select:focus {
+  border-color: var(--accent);
+}
+
+.no-cutoff {
+  width: 88px;
+  min-width: 88px;
 }
 
 .btn-add {
@@ -344,59 +528,160 @@ body {
   background: var(--accent-dim);
 }
 
-/* PINS TAB */
-.pins-list {
+/* ─── COSTS TAB ────────────────────────────────────────── */
+
+.costs-tab {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 16px;
+  padding-bottom: 8px;
 }
 
-.pin-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
+.cost-group {
   background: var(--surface2);
-  border-radius: 8px;
+  border-radius: var(--r);
   border: 1px solid var(--border);
-  cursor: pointer;
-  transition: border-color 0.15s;
+  overflow: hidden;
 }
 
-.pin-item:hover {
-  border-color: var(--border2);
-}
-
-.pin-num {
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  background: var(--accent);
-  color: var(--accent-text);
-  font-size: 11px;
-  font-weight: 700;
+.cost-group-header {
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+}
+
+.cost-subtotal {
+  color: var(--accent);
+  font-size: 13px;
+  font-family: 'DM Mono', monospace;
+  font-weight: 600;
+}
+
+.cost-empty {
+  font-size: 12px;
+  color: var(--muted);
+  padding: 10px 14px;
+}
+
+/* Full-width table */
+.cost-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.cost-row {
+  border-bottom: 1px solid var(--border);
+}
+
+.cost-row:last-child {
+  border-bottom: none;
+}
+
+.cost-name {
+  padding: 9px 14px;
+  vertical-align: middle;
+}
+
+.cost-name > div:first-child {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.cost-day-label {
+  font-size: 10px;
+  color: var(--muted);
+  margin-top: 2px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.cost-input-cell {
+  padding: 9px 14px 9px 0;
+  vertical-align: middle;
+  width: 110px;
+  text-align: right;
+}
+
+.cost-input-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+
+  padding-bottom: 3px;
+
+  border-bottom: 1px solid rgba(255,255,255,0.16);
+
+  background: none;
+}
+
+.cost-dollar {
+  font-size: 12px;
+  color: var(--muted);
   flex-shrink: 0;
 }
 
-.pin-name {
+.cost-input {
+  background: none;
+  border: none;
+
+  color: var(--text);
+
   font-size: 13px;
-  font-weight: 500;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  font-family: 'DM Mono', monospace;
+
+  outline: none;
+
+  width: 58px;
+
+  text-align: right;
+
+  padding: 0;
 }
 
-.pin-coords {
-  font-size: 11px;
-  color: var(--muted);
-  margin-top: 2px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.cost-input:focus {
+  color: var(--accent);
 }
+
+.cost-input:focus {
+  color: var(--accent);
+}
+
+/* Hide number input arrows */
+.cost-input::-webkit-outer-spin-button,
+.cost-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.cost-input[type=number] {
+  -moz-appearance: textfield;
+}
+
+/* Grand total row */
+.cost-total-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--accent-dim);
+  border: 1px solid var(--accent);
+  border-radius: var(--r);
+  padding: 12px 16px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--accent);
+  font-family: 'DM Mono', monospace;
+}
+
+/* ─── HINT (empty states) ──────────────────────────────── */
 
 .hint {
   font-size: 12px;
@@ -410,7 +695,8 @@ body {
   color: var(--accent);
 }
 
-/* MAP */
+/* ─── MAP ──────────────────────────────────────────────── */
+
 .map-area {
   position: relative;
 }
@@ -420,7 +706,8 @@ body {
   height: 100vh;
 }
 
-/* SEARCH */
+/* ─── SEARCH BAR ───────────────────────────────────────── */
+
 .map-search-bar {
   position: absolute;
   top: 16px;
@@ -520,7 +807,8 @@ body {
   color: #e55;
 }
 
-/* MAP OVERLAY */
+/* ─── MAP OVERLAY (top right) ──────────────────────────── */
+
 .map-overlay {
   position: absolute;
   top: 16px;
@@ -572,7 +860,8 @@ body {
   border-color: #2a7a2a !important;
 }
 
-/* PIN POPUP */
+/* ─── PIN POPUP ────────────────────────────────────────── */
+
 .pin-popup {
   position: absolute;
   bottom: 40px;
@@ -633,6 +922,7 @@ body {
   font-size: 12px;
   color: var(--muted);
   flex-shrink: 0;
+  width: 36px;
 }
 
 .pin-popup-btn {
@@ -664,21 +954,7 @@ body {
   opacity: 1;
 }
 
-.time-input {
-  background: none;
-  border: none;
-  color: var(--muted);
-  font-size: 11px;
-  font-family: 'DM Mono', monospace;
-  outline: none;
-  cursor: pointer;
-  padding: 0;
-  width: 80px;
-}
-
-.time-input:hover {
-  color: var(--accent);
-}
+/* ─── LEAFLET OVERRIDES ────────────────────────────────── */
 
 .leaflet-container {
   background: #e8e0d8 !important;
