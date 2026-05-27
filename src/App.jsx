@@ -36,6 +36,31 @@ function makeIcon(label, color) {
   });
 }
 
+function makeStarIcon() {
+  return L.divIcon({
+    html: `
+      <div style="
+        background:#FFD700;
+        color:#0f0f13;
+        width:28px;
+        height:28px;
+        border-radius:50% 50% 50% 0;
+        transform:rotate(-45deg);
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        font-size:13px;
+        border:2px solid rgba(0,0,0,0.25)
+      ">
+        <span style="transform:rotate(45deg)">★</span>
+      </div>
+    `,
+    className: "",
+    iconSize: [28, 28],
+    iconAnchor: [14, 28],
+  });
+}
+
 function load() {
   try {
     const raw = localStorage.getItem("tripplanner");
@@ -55,17 +80,16 @@ function addDays(dateStr, n) {
   return d.toISOString().split("T")[0];
 }
 
-// Sort stops within each day by time, then assign global sequential labels
 function reindexPins(days, pins) {
-  // Build a list of pin IDs sorted by time within each day
+  if (!days || !pins) return [];
   const orderedIds = days.flatMap((day) => {
+    if (!day?.stops) return [];
     const dayPins = day.stops
       .map((sid) => pins.find((p) => p.id === sid))
       .filter(Boolean)
       .sort((a, b) => (a.time || "00:00").localeCompare(b.time || "00:00"));
     return dayPins.map((p) => p.id);
   });
-
   return pins.map((pin) => {
     const pos = orderedIds.indexOf(pin.id);
     return { ...pin, label: pos >= 0 ? String(pos + 1) : "?" };
@@ -76,14 +100,12 @@ export default function App() {
   const saved = load();
 
   const [tripName, setTripName] = useState(saved?.tripName || "Japan 2025");
-
   const [days, setDays] = useState(
     saved?.days || [
       { id: 1, label: "Day 1", date: "2025-09-01", stops: [] },
       { id: 2, label: "Day 2", date: "2025-09-02", stops: [] },
     ]
   );
-
   const [pins, setPins] = useState(saved?.pins || []);
   const [nextDayId, setNextDayId] = useState(saved?.nextDayId || 3);
   const [nextPinId, setNextPinId] = useState(saved?.nextPinId || 1);
@@ -93,8 +115,9 @@ export default function App() {
   const [popupName, setPopupName] = useState("");
   const [popupDay, setPopupDay] = useState(null);
   const [popupTime, setPopupTime] = useState("09:00");
+  const [wishlist, setWishlist] = useState(saved?.wishlist || []);
+  const [showRoute, setShowRoute] = useState(false);
 
-  // Search state
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState([]);
   const [searchError, setSearchError] = useState("");
@@ -103,19 +126,19 @@ export default function App() {
   const mapRef = useRef(null);
   const leafletMap = useRef(null);
   const markersRef = useRef({});
+  const routeLinesRef = useRef([]);
   const daysRef = useRef(days);
   const pinsRef = useRef(pins);
 
   useEffect(() => { daysRef.current = days; }, [days]);
   useEffect(() => { pinsRef.current = pins; }, [pins]);
 
-  // Persist on every change
   useEffect(() => {
-    save({ tripName, days, pins, nextDayId, nextPinId });
-  }, [tripName, days, pins, nextDayId, nextPinId]);
+    save({ tripName, days, pins, nextDayId, nextPinId, wishlist });
+  }, [tripName, days, pins, nextDayId, nextPinId, wishlist]);
 
-  // Refresh all marker labels whenever pins or days change
   useEffect(() => {
+    if (!days?.length || !pins?.length) return;
     const indexed = reindexPins(days, pins);
     indexed.forEach((pin) => {
       if (markersRef.current[pin.id] && pin.lat !== null) {
@@ -126,38 +149,118 @@ export default function App() {
     });
   }, [pins, days]);
 
-  // Init map once
+  // Draw / clear route lines
+  useEffect(() => {
+    if (!leafletMap.current) return;
+    routeLinesRef.current.forEach((l) => l.remove());
+    routeLinesRef.current = [];
+    if (!showRoute) return;
+    days.forEach((day, dayIdx) => {
+      const dayPins = (day.stops || [])
+        .map((sid) => pins.find((p) => p.id === sid))
+        .filter((p) => p && p.lat !== null)
+        .sort((a, b) => (a.time || "00:00").localeCompare(b.time || "00:00"));
+      if (dayPins.length < 2) return;
+      const color = DAY_COLORS[dayIdx % DAY_COLORS.length];
+      const line = L.polyline(
+        dayPins.map((p) => [p.lat, p.lng]),
+        { color, weight: 2.5, opacity: 0.7, dashArray: "6 4" }
+      ).addTo(leafletMap.current);
+      routeLinesRef.current.push(line);
+    });
+  }, [showRoute, pins, days]);
+
   useEffect(() => {
     if (leafletMap.current) return;
 
     const map = L.map(mapRef.current, { zoomControl: false }).setView([35.68, 139.69], 5);
     L.control.zoom({ position: "bottomright" }).addTo(map);
 
-    // Light mode tile layer
     L.tileLayer(
       "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
-      {
-        attribution: "© OpenStreetMap © CARTO",
-        maxZoom: 19,
-      }
+      { attribution: "© OpenStreetMap © CARTO", maxZoom: 19 }
     ).addTo(map);
 
-    map.on("click", (e) => {
-      setPending({ lat: +e.latlng.lat.toFixed(4), lng: +e.latlng.lng.toFixed(4) });
-      setPopupName("");
+    map.on("click", async (e) => {
+      const lat = +e.latlng.lat.toFixed(4);
+      const lng = +e.latlng.lng.toFixed(4);
+      setPending({ lat, lng });
       setPopupTime("09:00");
       setPopupDay(daysRef.current[0]?.id ?? null);
+      setPopupName("Loading...");
+      try {
+        const res = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`
+        );
+        const data = await res.json();
+        const name =
+          data.name ||
+          data.address?.tourism ||
+          data.address?.amenity ||
+          data.address?.road ||
+          data.address?.suburb ||
+          data.address?.city ||
+          "";
+        setPopupName(name);
+      } catch {
+        setPopupName("");
+      }
+    });
+
+    map.on("contextmenu", async (e) => {
+      L.DomEvent.preventDefault(e);
+      const lat = +e.latlng.lat.toFixed(4);
+      const lng = +e.latlng.lng.toFixed(4);
+      const id = Date.now();
+      const wishPin = { id, name: `${lat}, ${lng}`, lat, lng };
+      const marker = L.marker([lat, lng], { icon: makeStarIcon() });
+      marker.addTo(map);
+      setWishlist((w) => [...w, wishPin]);
+      try {
+        const res = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`
+        );
+        const data = await res.json();
+        const name =
+          data.name ||
+          data.address?.tourism ||
+          data.address?.amenity ||
+          data.address?.road ||
+          data.address?.suburb ||
+          data.address?.city ||
+          `${lat}, ${lng}`;
+        wishPin.name = name;
+        setWishlist((w) => w.map((x) => (x.id === id ? { ...x, name } : x)));
+      } catch { /* keep coordinate fallback */ }
+      marker.bindPopup(`
+        <div style="font-family:sans-serif;font-size:13px">
+          <div style="font-weight:600;margin-bottom:4px">⭐ ${wishPin.name}</div>
+          <button id="remove-wish-${id}" style="font-size:12px;cursor:pointer;background:#fee;border:1px solid #fcc;border-radius:6px;padding:4px 10px;color:#c33">
+            Remove
+          </button>
+        </div>
+      `);
+      marker.on("popupopen", () => {
+        document.getElementById(`remove-wish-${id}`)?.addEventListener("click", () => {
+          marker.remove();
+          setWishlist((w) => w.filter((x) => x.id !== id));
+        });
+      });
     });
 
     leafletMap.current = map;
 
-    // Restore saved markers
-    const indexed = reindexPins(pinsRef.current, pinsRef.current);
+    const indexed = reindexPins(daysRef.current, pinsRef.current);
     indexed.forEach((pin) => {
-      if (pin.lat !== null) {
-        addMarkerToMap(pin, daysRef.current, map);
-      }
+      if (pin.lat !== null) addMarkerToMap(pin, daysRef.current, map);
     });
+
+    return () => {
+      map.remove();
+      leafletMap.current = null;
+      markersRef.current = {};
+      routeLinesRef.current = [];
+    };
   }, []);
 
   function addMarkerToMap(pin, currentDays, map) {
@@ -165,7 +268,7 @@ export default function App() {
     const dayIdx = currentDays.findIndex((d) => d.id === pin.dayId);
     const color = DAY_COLORS[dayIdx % DAY_COLORS.length];
     const marker = L.marker([pin.lat, pin.lng], {
-      icon: makeIcon(pin.label ?? pin.id, color),
+      icon: makeIcon(pin.label, color),
     });
     marker.on("click", () => {
       setHighlighted(pin.id);
@@ -184,23 +287,19 @@ export default function App() {
       label: "?",
       name,
       time: popupTime,
+      notes: "",
       lat: pending.lat,
       lng: pending.lng,
       dayId,
     };
-
     const newDays = daysRef.current.map((d) =>
       d.id === dayId ? { ...d, stops: [...d.stops, pin.id] } : d
     );
     const newPins = reindexPins(newDays, [...pinsRef.current, pin]);
-
     setPins(newPins);
     setDays(newDays);
     setNextPinId((n) => n + 1);
-    addMarkerToMap(
-      newPins.find((p) => p.id === pin.id),
-      newDays
-    );
+    addMarkerToMap(newPins.find((p) => p.id === pin.id), newDays);
     setPending(null);
   }
 
@@ -213,10 +312,7 @@ export default function App() {
       ...d,
       stops: d.stops.filter((s) => s !== pinId),
     }));
-    const newPins = reindexPins(
-      newDays,
-      pins.filter((p) => p.id !== pinId)
-    );
+    const newPins = reindexPins(newDays, pins.filter((p) => p.id !== pinId));
     setDays(newDays);
     setPins(newPins);
   }
@@ -243,7 +339,13 @@ export default function App() {
 
   function removeDay(dayId) {
     const day = days.find((d) => d.id === dayId);
-    if (day) day.stops.forEach((sid) => removePin(sid));
+    if (!day) return;
+    const stopCount = day.stops.length;
+    const msg = stopCount > 0
+      ? `Delete ${day.label}? This will also remove its ${stopCount} stop${stopCount !== 1 ? "s" : ""}.`
+      : `Delete ${day.label}?`;
+    if (!window.confirm(msg)) return;
+    day.stops.forEach((sid) => removePin(sid));
     setDays((ds) => ds.filter((d) => d.id !== dayId));
   }
 
@@ -254,6 +356,7 @@ export default function App() {
       label: "?",
       name: name.trim(),
       time: time || "09:00",
+      notes: "",
       lat: null,
       lng: null,
       dayId,
@@ -268,10 +371,12 @@ export default function App() {
   }
 
   function updateStopTime(pinId, time) {
-    // Update the time then reindex so order reflects the new time
     const updatedPins = pins.map((p) => (p.id === pinId ? { ...p, time } : p));
-    const reindexed = reindexPins(days, updatedPins);
-    setPins(reindexed);
+    setPins(reindexPins(days, updatedPins));
+  }
+
+  function updateStopNotes(pinId, notes) {
+    setPins((ps) => ps.map((p) => (p.id === pinId ? { ...p, notes } : p)));
   }
 
   function focusPin(pinId) {
@@ -282,7 +387,6 @@ export default function App() {
     }
   }
 
-  // Place search using Nominatim
   async function handleSearch(e) {
     e.preventDefault();
     if (!searchQuery.trim()) return;
@@ -290,17 +394,11 @@ export default function App() {
     setSearchError("");
     setSearchResults([]);
     try {
-      const url =
-        `https://nominatim.openstreetmap.org/search?format=json&limit=5&q=${encodeURIComponent(searchQuery)}`;
-
-      const res = await fetch(url);
-
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`);
-      }
-
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&limit=5&q=${encodeURIComponent(searchQuery)}`
+      );
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-
       if (!Array.isArray(data) || data.length === 0) {
         setSearchError("No results found.");
       } else {
@@ -318,7 +416,6 @@ export default function App() {
     const lat = +parseFloat(result.lat).toFixed(4);
     const lng = +parseFloat(result.lon).toFixed(4);
     leafletMap.current?.setView([lat, lng], 13, { animate: true });
-    // Pre-fill popup with the place name
     const shortName = result.name || result.display_name.split(",")[0];
     setPending({ lat, lng });
     setPopupName(shortName);
@@ -373,6 +470,7 @@ export default function App() {
                   }
                   onAddStop={(name, time) => addManualStop(day.id, name, time)}
                   onTimeChange={updateStopTime}
+                  onNotesChange={updateStopNotes}
                 />
               ))}
               <button className="add-day-btn" onClick={addDay}>
@@ -393,8 +491,7 @@ export default function App() {
       <div className="map-area">
         <div ref={mapRef} id="map" />
 
-        {/* Search bar */}
-        <div className="map-search-bar" style={{ position: "absolute", top: 16, left: 16, zIndex: 1000 }}>
+        <div className="map-search-bar">
           <div style={{ position: "relative", flex: 1 }}>
             <form onSubmit={handleSearch} style={{ display: "flex", gap: 6 }}>
               <input
@@ -437,9 +534,15 @@ export default function App() {
 
         <div className="map-overlay">
           <div className="map-badge">
-            <strong>Click map to drop pin</strong>
-            Name it and assign to a day
+            <strong>Click to drop pin</strong>
+            Right-click to wishlist ⭐
           </div>
+          <button
+            className={`clear-btn${showRoute ? " active-btn" : ""}`}
+            onClick={() => setShowRoute((v) => !v)}
+          >
+            {showRoute ? "✕ Hide route" : "⟶ Show route"}
+          </button>
           <button className="clear-btn" onClick={clearAll}>
             ✕ Clear all pins
           </button>
@@ -448,13 +551,10 @@ export default function App() {
         {pending && (
           <div className="pin-popup">
             <div className="pin-popup-title">📍 New Stop</div>
-            <div className="pin-popup-coords">
-              {pending.lat}, {pending.lng}
-            </div>
             <input
               className="pin-popup-input"
               autoFocus
-              placeholder="Place name e.g. Shibuya Crossing"
+              placeholder="Place name..."
               value={popupName}
               onChange={(e) => setPopupName(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && confirmPin()}
@@ -507,12 +607,12 @@ function DayBlock({
   onDateChange,
   onAddStop,
   onTimeChange,
+  onNotesChange,
 }) {
   const [input, setInput] = useState("");
   const [time, setTime] = useState("09:00");
 
-  // Sort stops by time for display
-  const stops = day.stops
+  const stops = (day.stops || [])
     .map((sid) => pins.find((p) => p.id === sid))
     .filter(Boolean)
     .sort((a, b) => (a.time || "00:00").localeCompare(b.time || "00:00"));
@@ -558,8 +658,18 @@ function DayBlock({
                     onTimeChange(s.id, e.target.value);
                   }}
                 />
-                {s.lat !== null ? ` · ${s.lat}, ${s.lng}` : " · no map pin"}
               </div>
+              <textarea
+                className="stop-notes"
+                placeholder="Add notes..."
+                value={s.notes || ""}
+                rows={s.notes ? s.notes.split("\n").length + 1 : 1}
+                onClick={(e) => e.stopPropagation()}
+                onChange={(e) => {
+                  e.stopPropagation();
+                  onNotesChange(s.id, e.target.value);
+                }}
+              />
             </div>
             <button
               className="stop-remove"
@@ -626,8 +736,8 @@ function PinsTab({ pins, days, onFocus, onRemove }) {
             <div style={{ flex: 1, minWidth: 0 }}>
               <div className="pin-name">{pin.name}</div>
               <div className="pin-coords">
-                {day?.label ?? "?"} · {pin.time} ·{" "}
-                {pin.lat !== null ? `${pin.lat}, ${pin.lng}` : "no coords"}
+                {day?.label ?? "?"} · {pin.time}
+                {pin.notes ? ` · ${pin.notes}` : ""}
               </div>
             </div>
             <button
