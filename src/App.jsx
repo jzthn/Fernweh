@@ -4,8 +4,6 @@ import "leaflet/dist/leaflet.css";
 import "./App.css";
 import { createClient } from "@supabase/supabase-js";
 
-// ── Supabase client ────────────────────────────────────────────
-// Replace these two values with your own from supabase.com → Settings → API
 const supabase = createClient(
   "https://tdgwulykndzopmkmzsfg.supabase.co",
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRkZ3d1bHlrbmR6b3Bta216c2ZnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk5NjczOTUsImV4cCI6MjA5NTU0MzM5NX0.kp19XJcMD9tgP1-NtqK5go24h50gOfn5HUtcCtumHm0"
@@ -29,12 +27,33 @@ async function saveToDB(payload) {
     .upsert({ id: STORAGE_KEY, data: payload, updated_at: new Date().toISOString() });
 }
 
-// ── Constants ──────────────────────────────────────────────────
-
 const DAY_COLORS = [
   "#c8f55a", "#7eb3ff", "#ff9f7e",
   "#e878b8", "#78e8c8", "#ffcc55",
   "#ff8888", "#aaaaff"
+];
+
+// Muted/dark versions of DAY_COLORS for sidebar backgrounds
+const DAY_BG_COLORS = [
+  "rgba(200,245,90,0.08)",
+  "rgba(126,179,255,0.08)",
+  "rgba(255,159,126,0.08)",
+  "rgba(232,120,184,0.08)",
+  "rgba(120,232,200,0.08)",
+  "rgba(255,204,85,0.08)",
+  "rgba(255,136,136,0.08)",
+  "rgba(170,170,255,0.08)",
+];
+
+const DAY_BORDER_COLORS = [
+  "rgba(200,245,90,0.25)",
+  "rgba(126,179,255,0.25)",
+  "rgba(255,159,126,0.25)",
+  "rgba(232,120,184,0.25)",
+  "rgba(120,232,200,0.25)",
+  "rgba(255,204,85,0.25)",
+  "rgba(255,136,136,0.25)",
+  "rgba(170,170,255,0.25)",
 ];
 
 const STOP_TYPES = ["activity", "flight", "hotel", "food"];
@@ -46,15 +65,12 @@ const TYPE_ICON = {
   food: "🍜",
 };
 
-// ── Map helpers ────────────────────────────────────────────────
-
 function makeIcon(label, color, type) {
   const icon =
     type === "flight" ? "✈️"
     : type === "hotel" ? "🏨"
     : type === "food" ? "🍜"
     : label;
-
   return L.divIcon({
     html: `
       <div style="
@@ -106,8 +122,6 @@ function makeStarIcon() {
   });
 }
 
-// ── Data helpers ───────────────────────────────────────────────
-
 function emptyTrip(name) {
   return {
     id: Date.now(),
@@ -127,6 +141,16 @@ function addDaysToDate(dateStr, n) {
   const d = new Date(dateStr);
   d.setDate(d.getDate() + n);
   return d.toISOString().split("T")[0];
+}
+
+// Sort days by date, then relabel Day 1, Day 2 etc in order
+function sortAndRelabelDays(days) {
+  const sorted = [...days].sort((a, b) => {
+    if (!a.date) return 1;
+    if (!b.date) return -1;
+    return a.date.localeCompare(b.date);
+  });
+  return sorted.map((d, i) => ({ ...d, label: `Day ${i + 1}` }));
 }
 
 function reindexPins(days, pins) {
@@ -159,7 +183,6 @@ export default function Root() {
   const [newTripName, setNewTripName] = useState("");
   const saveTimerRef = useRef(null);
 
-  // Load from Supabase on mount
   useEffect(() => {
     loadFromDB().then((saved) => {
       if (saved && saved.trips && saved.trips.length > 0) {
@@ -172,27 +195,19 @@ export default function Root() {
     });
   }, []);
 
-  // Save to Supabase whenever allData changes, debounced 800ms
   useEffect(() => {
     if (!loaded || !allData) return;
     clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(() => {
-      saveToDB(allData);
-    }, 800);
+    saveTimerRef.current = setTimeout(() => saveToDB(allData), 800);
     return () => clearTimeout(saveTimerRef.current);
   }, [allData, loaded]);
 
   if (!loaded) {
     return (
       <div style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        height: "100vh",
-        background: "#0f0f13",
-        color: "#888794",
-        fontSize: "14px",
-        gap: "10px",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        height: "100vh", background: "#0f0f13", color: "#888794",
+        fontSize: "14px", gap: "10px",
       }}>
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#c8f55a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
@@ -214,10 +229,7 @@ export default function Root() {
   function createTrip() {
     const name = newTripName.trim() || "New Trip";
     const trip = emptyTrip(name);
-    setAllData((prev) => ({
-      activeId: trip.id,
-      trips: [...prev.trips, trip],
-    }));
+    setAllData((prev) => ({ activeId: trip.id, trips: [...prev.trips, trip] }));
     setNewTripName("");
     setShowTripMenu(false);
   }
@@ -241,7 +253,6 @@ export default function Root() {
               <span>My Trips</span>
               <button className="trip-menu-close" onClick={() => setShowTripMenu(false)}>✕</button>
             </div>
-
             <div className="trip-list">
               {allData.trips.map((trip) => (
                 <div
@@ -259,19 +270,12 @@ export default function Root() {
                   </span>
                   <div className="trip-list-actions">
                     {allData.trips.length > 1 && (
-                      <button
-                        className="trip-action-btn danger"
-                        onClick={() => deleteTrip(trip.id)}
-                        title="Delete"
-                      >
-                        ✕
-                      </button>
+                      <button className="trip-action-btn danger" onClick={() => deleteTrip(trip.id)} title="Delete">✕</button>
                     )}
                   </div>
                 </div>
               ))}
             </div>
-
             <div className="trip-new-row">
               <input
                 className="trip-new-input"
@@ -285,7 +289,6 @@ export default function Root() {
           </div>
         </div>
       )}
-
       <App
         key={activeTrip.id}
         trip={activeTrip}
@@ -301,7 +304,7 @@ export default function Root() {
 function App({ trip, onUpdate, onOpenTripMenu }) {
   const [tripName, setTripName] = useState(trip.tripName);
   const [editingTitle, setEditingTitle] = useState(false);
-  const [days, setDays] = useState(trip.days);
+  const [days, setDays] = useState(() => sortAndRelabelDays(trip.days));
   const [pins, setPins] = useState(trip.pins);
   const [nextDayId, setNextDayId] = useState(trip.nextDayId);
   const [nextPinId, setNextPinId] = useState(trip.nextPinId);
@@ -341,12 +344,10 @@ function App({ trip, onUpdate, onOpenTripMenu }) {
     }
   }, [editingTitle]);
 
-  // Sync state up to Root (which saves to Supabase)
   useEffect(() => {
     onUpdate({ ...trip, tripName, days, pins, wishlist, nextDayId, nextPinId });
   }, [tripName, days, pins, wishlist, nextDayId, nextPinId]);
 
-  // Refresh marker icons when pins/days change
   useEffect(() => {
     if (!days?.length || !pins?.length) return;
     const indexed = reindexPins(days, pins);
@@ -359,7 +360,6 @@ function App({ trip, onUpdate, onOpenTripMenu }) {
     });
   }, [pins, days]);
 
-  // Route lines
   useEffect(() => {
     if (!leafletMap.current) return;
     routeLinesRef.current.forEach((l) => l.remove());
@@ -380,22 +380,15 @@ function App({ trip, onUpdate, onOpenTripMenu }) {
     });
   }, [showRoute, pins, days]);
 
-  // Init map
   useEffect(() => {
     if (leafletMap.current) return;
-
     const geoPins = pinsRef.current.filter((p) => p.lat !== null && p.lng !== null);
     const map = L.map(mapRef.current, { zoomControl: false });
-
     if (geoPins.length > 0) {
-      map.fitBounds(
-        L.latLngBounds(geoPins.map((p) => [p.lat, p.lng])),
-        { padding: [60, 60] }
-      );
+      map.fitBounds(L.latLngBounds(geoPins.map((p) => [p.lat, p.lng])), { padding: [60, 60] });
     } else {
       map.setView([35.68, 139.69], 5);
     }
-
     L.control.zoom({ position: "bottomright" }).addTo(map);
     L.tileLayer(
       "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
@@ -412,22 +405,10 @@ function App({ trip, onUpdate, onOpenTripMenu }) {
       setPopupDay(daysRef.current[0]?.id ?? null);
       setPopupName("Loading...");
       try {
-        const res = await fetch(
-          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`
-        );
+        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
         const data = await res.json();
-        setPopupName(
-          data.name ||
-          data.address?.tourism ||
-          data.address?.amenity ||
-          data.address?.road ||
-          data.address?.suburb ||
-          data.address?.city ||
-          ""
-        );
-      } catch {
-        setPopupName("");
-      }
+        setPopupName(data.name || data.address?.tourism || data.address?.amenity || data.address?.road || data.address?.suburb || data.address?.city || "");
+      } catch { setPopupName(""); }
     });
 
     map.on("contextmenu", async (e) => {
@@ -438,31 +419,15 @@ function App({ trip, onUpdate, onOpenTripMenu }) {
       setPendingAsWish(true);
       setPopupName("Loading...");
       try {
-        const res = await fetch(
-          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`
-        );
+        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
         const data = await res.json();
-        setPopupName(
-          data.name ||
-          data.address?.tourism ||
-          data.address?.amenity ||
-          data.address?.road ||
-          data.address?.suburb ||
-          data.address?.city ||
-          `${lat}, ${lng}`
-        );
-      } catch {
-        setPopupName(`${lat}, ${lng}`);
-      }
+        setPopupName(data.name || data.address?.tourism || data.address?.amenity || data.address?.road || data.address?.suburb || data.address?.city || `${lat}, ${lng}`);
+      } catch { setPopupName(`${lat}, ${lng}`); }
     });
 
     leafletMap.current = map;
-
     const indexed = reindexPins(daysRef.current, pinsRef.current);
-    indexed.forEach((pin) => {
-      if (pin.lat !== null) addMarkerToMap(pin, daysRef.current, map);
-    });
-
+    indexed.forEach((pin) => { if (pin.lat !== null) addMarkerToMap(pin, daysRef.current, map); });
     wishlistRef.current.forEach((w) => placeWishMarker(w, map));
 
     return () => {
@@ -478,9 +443,7 @@ function App({ trip, onUpdate, onOpenTripMenu }) {
     const m = map || leafletMap.current;
     const dayIdx = currentDays.findIndex((d) => d.id === pin.dayId);
     const color = DAY_COLORS[dayIdx % DAY_COLORS.length];
-    const marker = L.marker([pin.lat, pin.lng], {
-      icon: makeIcon(pin.label, color, pin.type),
-    });
+    const marker = L.marker([pin.lat, pin.lng], { icon: makeIcon(pin.label, color, pin.type) });
     marker.on("click", () => {
       setHighlighted(pin.id);
       leafletMap.current.setView([pin.lat, pin.lng], 12, { animate: true });
@@ -493,7 +456,6 @@ function App({ trip, onUpdate, onOpenTripMenu }) {
     const m = map || leafletMap.current;
     const marker = L.marker([w.lat, w.lng], { icon: makeStarIcon() });
     const id = w.id;
-
     function buildPopupContent(name) {
       return `
         <div style="font-family:sans-serif;font-size:13px;min-width:180px">
@@ -506,7 +468,6 @@ function App({ trip, onUpdate, onOpenTripMenu }) {
           </div>
         </div>`;
     }
-
     marker.bindPopup(buildPopupContent(w.name));
     marker.on("popupopen", () => {
       document.getElementById(`save-wish-${id}`)?.addEventListener("click", () => {
@@ -522,7 +483,6 @@ function App({ trip, onUpdate, onOpenTripMenu }) {
         setWishlist((prev) => prev.filter((x) => x.id !== id));
       });
     });
-
     marker.addTo(m);
     wishMarkersRef.current[id] = marker;
     return marker;
@@ -531,7 +491,6 @@ function App({ trip, onUpdate, onOpenTripMenu }) {
   function confirmPin() {
     if (!pending) return;
     const name = popupName.trim() || "Unnamed Stop";
-
     if (pendingAsWish) {
       const w = { id: Date.now(), name, lat: pending.lat, lng: pending.lng };
       placeWishMarker(w);
@@ -539,19 +498,11 @@ function App({ trip, onUpdate, onOpenTripMenu }) {
       setPending(null);
       return;
     }
-
     const dayId = popupDay ?? days[0]?.id;
     const pin = {
-      id: nextPinId,
-      label: "?",
-      name,
-      time: popupTime,
-      type: popupType || "activity",
-      notes: "",
-      cost: "",
-      lat: pending.lat,
-      lng: pending.lng,
-      dayId,
+      id: nextPinId, label: "?", name, time: popupTime,
+      type: popupType || "activity", notes: "", cost: "",
+      lat: pending.lat, lng: pending.lng, dayId,
     };
     const newDays = daysRef.current.map((d) =>
       d.id === dayId ? { ...d, stops: [...d.stops, pin.id] } : d
@@ -574,14 +525,8 @@ function App({ trip, onUpdate, onOpenTripMenu }) {
   }
 
   function removePin(pinId) {
-    if (markersRef.current[pinId]) {
-      markersRef.current[pinId].remove();
-      delete markersRef.current[pinId];
-    }
-    const newDays = days.map((d) => ({
-      ...d,
-      stops: d.stops.filter((s) => s !== pinId),
-    }));
+    if (markersRef.current[pinId]) { markersRef.current[pinId].remove(); delete markersRef.current[pinId]; }
+    const newDays = days.map((d) => ({ ...d, stops: d.stops.filter((s) => s !== pinId) }));
     const newPins = reindexPins(newDays, pins.filter((p) => p.id !== pinId));
     setDays(newDays);
     setPins(newPins);
@@ -596,11 +541,10 @@ function App({ trip, onUpdate, onOpenTripMenu }) {
 
   function addDay() {
     const lastDay = days[days.length - 1];
-    const newDate = lastDay
-      ? addDaysToDate(lastDay.date, 1)
-      : new Date().toISOString().split("T")[0];
-    const n = days.length + 1;
-    setDays([...days, { id: nextDayId, label: `Day ${n}`, date: newDate, stops: [] }]);
+    const newDate = lastDay ? addDaysToDate(lastDay.date, 1) : new Date().toISOString().split("T")[0];
+    const newDay = { id: nextDayId, label: "", date: newDate, stops: [] };
+    const sorted = sortAndRelabelDays([...days, newDay]);
+    setDays(sorted);
     setNextDayId((x) => x + 1);
   }
 
@@ -613,34 +557,28 @@ function App({ trip, onUpdate, onOpenTripMenu }) {
       : `Delete ${day.label}?`;
     if (!window.confirm(msg)) return;
     day.stops.forEach((sid) => {
-      if (markersRef.current[sid]) {
-        markersRef.current[sid].remove();
-        delete markersRef.current[sid];
-      }
+      if (markersRef.current[sid]) { markersRef.current[sid].remove(); delete markersRef.current[sid]; }
     });
     const remainingPins = pins.filter((p) => !day.stops.includes(p.id));
-    const remainingDays = days.filter((d) => d.id !== dayId);
+    const remainingDays = sortAndRelabelDays(days.filter((d) => d.id !== dayId));
     setPins(reindexPins(remainingDays, remainingPins));
     setDays(remainingDays);
+  }
+
+  function handleDateChange(dayId, newDate) {
+    const updated = days.map((d) => (d.id === dayId ? { ...d, date: newDate } : d));
+    const sorted = sortAndRelabelDays(updated);
+    setDays(sorted);
   }
 
   function addManualStop(dayId, name, time, type) {
     if (!name.trim()) return;
     const pin = {
-      id: nextPinId,
-      label: "?",
-      name: name.trim(),
-      time: time || "09:00",
-      type: type || "activity",
-      notes: "",
-      cost: "",
-      lat: null,
-      lng: null,
-      dayId,
+      id: nextPinId, label: "?", name: name.trim(),
+      time: time || "09:00", type: type || "activity",
+      notes: "", cost: "", lat: null, lng: null, dayId,
     };
-    const newDays = days.map((d) =>
-      d.id === dayId ? { ...d, stops: [...d.stops, pin.id] } : d
-    );
+    const newDays = days.map((d) => d.id === dayId ? { ...d, stops: [...d.stops, pin.id] } : d);
     const newPins = reindexPins(newDays, [...pins, pin]);
     setPins(newPins);
     setDays(newDays);
@@ -664,10 +602,7 @@ function App({ trip, onUpdate, onOpenTripMenu }) {
   }
 
   function updateStopType(pinId, type) {
-    const reindexed = reindexPins(
-      days,
-      pins.map((p) => (p.id === pinId ? { ...p, type } : p))
-    );
+    const reindexed = reindexPins(days, pins.map((p) => (p.id === pinId ? { ...p, type } : p)));
     setPins(reindexed);
     const pin = reindexed.find((p) => p.id === pinId);
     if (pin && pin.lat !== null && markersRef.current[pinId]) {
@@ -692,21 +627,13 @@ function App({ trip, onUpdate, onOpenTripMenu }) {
     setSearchError("");
     setSearchResults([]);
     try {
-      const res = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&limit=5&q=${encodeURIComponent(searchQuery)}`
-      );
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=5&q=${encodeURIComponent(searchQuery)}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      if (!Array.isArray(data) || data.length === 0) {
-        setSearchError("No results found.");
-      } else {
-        setSearchResults(data);
-      }
-    } catch {
-      setSearchError("Search failed.");
-    } finally {
-      setSearchLoading(false);
-    }
+      if (!Array.isArray(data) || data.length === 0) { setSearchError("No results found."); }
+      else { setSearchResults(data); }
+    } catch { setSearchError("Search failed."); }
+    finally { setSearchLoading(false); }
   }
 
   function selectSearchResult(result) {
@@ -741,22 +668,16 @@ function App({ trip, onUpdate, onOpenTripMenu }) {
             ) : (
               <div className="title-row">
                 <div className="app-title">{tripName}</div>
-                <button
-                  className="title-edit-btn"
-                  onClick={() => setEditingTitle(true)}
-                  title="Edit trip name"
-                >
+                <button className="title-edit-btn" onClick={() => setEditingTitle(true)} title="Edit trip name">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M12 20h9"/>
-                    <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>
+                    <path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>
                   </svg>
                 </button>
               </div>
             )}
             <button className="trips-menu-btn" onClick={onOpenTripMenu} title="All trips">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="2" y="3" width="20" height="14" rx="2"/>
-                <path d="M8 21h8M12 17v4"/>
+                <rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>
               </svg>
               Trips
             </button>
@@ -764,35 +685,24 @@ function App({ trip, onUpdate, onOpenTripMenu }) {
         </div>
 
         <div className="tabs">
-          <button
-            className={`tab${tab === "itinerary" ? " active" : ""}`}
-            onClick={() => setTab("itinerary")}
-          >
-            Itinerary
-          </button>
-          <button
-            className={`tab${tab === "costs" ? " active" : ""}`}
-            onClick={() => setTab("costs")}
-          >
-            Costs
-          </button>
+          <button className={`tab${tab === "itinerary" ? " active" : ""}`} onClick={() => setTab("itinerary")}>Itinerary</button>
+          <button className={`tab${tab === "costs" ? " active" : ""}`} onClick={() => setTab("costs")}>Costs</button>
         </div>
 
         <div className="sidebar-body">
           {tab === "itinerary" ? (
             <>
-              {days.map((day) => (
+              {days.map((day, dayIdx) => (
                 <DayBlock
                   key={day.id}
                   day={day}
+                  dayIdx={dayIdx}
                   pins={pins}
                   highlighted={highlighted}
                   onFocus={focusPin}
                   onRemovePin={removePin}
                   onRemoveDay={removeDay}
-                  onDateChange={(date) =>
-                    setDays(days.map((d) => (d.id === day.id ? { ...d, date } : d)))
-                  }
+                  onDateChange={(date) => handleDateChange(day.id, date)}
                   onAddStop={(name, time, type) => addManualStop(day.id, name, time, type)}
                   onTimeChange={updateStopTime}
                   onNameChange={updateStopName}
@@ -810,7 +720,6 @@ function App({ trip, onUpdate, onOpenTripMenu }) {
 
       <div className="map-area">
         <div ref={mapRef} id="map" />
-
         <div className="map-search-bar">
           <div style={{ position: "relative", flex: 1 }}>
             <form onSubmit={handleSearch} style={{ display: "flex", gap: 6 }}>
@@ -818,27 +727,16 @@ function App({ trip, onUpdate, onOpenTripMenu }) {
                 className="map-search-input"
                 placeholder="Search a place..."
                 value={searchQuery}
-                onChange={(e) => {
-                  setSearchQuery(e.target.value);
-                  if (!e.target.value) setSearchResults([]);
-                }}
+                onChange={(e) => { setSearchQuery(e.target.value); if (!e.target.value) setSearchResults([]); }}
               />
-              <button className="map-search-btn" type="submit">
-                {searchLoading ? "..." : "Search"}
-              </button>
+              <button className="map-search-btn" type="submit">{searchLoading ? "..." : "Search"}</button>
             </form>
             {(searchResults.length > 0 || searchError) && (
               <div className="search-results-dropdown">
                 {searchError && <div className="search-error">{searchError}</div>}
                 {searchResults.map((r) => (
-                  <div
-                    key={r.place_id}
-                    className="search-result-item"
-                    onClick={() => selectSearchResult(r)}
-                  >
-                    <div className="search-result-name">
-                      {r.name || r.display_name.split(",")[0]}
-                    </div>
+                  <div key={r.place_id} className="search-result-item" onClick={() => selectSearchResult(r)}>
+                    <div className="search-result-name">{r.name || r.display_name.split(",")[0]}</div>
                     <div className="search-result-addr">{r.display_name}</div>
                   </div>
                 ))}
@@ -852,10 +750,7 @@ function App({ trip, onUpdate, onOpenTripMenu }) {
             <strong>Click to drop pin</strong>
             Right-click to wishlist ⭐
           </div>
-          <button
-            className={`clear-btn${showRoute ? " active-btn" : ""}`}
-            onClick={() => setShowRoute((v) => !v)}
-          >
+          <button className={`clear-btn${showRoute ? " active-btn" : ""}`} onClick={() => setShowRoute((v) => !v)}>
             {showRoute ? "✕ Hide route" : "⟶ Show route"}
           </button>
           <button className="clear-btn" onClick={clearAll}>✕ Clear all pins</button>
@@ -866,81 +761,38 @@ function App({ trip, onUpdate, onOpenTripMenu }) {
             {pendingAsWish ? (
               <>
                 <div className="pin-popup-title">⭐ Add to Wishlist</div>
-                <input
-                  className="pin-popup-input"
-                  autoFocus
-                  placeholder="Place name..."
-                  value={popupName}
-                  onChange={(e) => setPopupName(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && confirmPin()}
-                />
+                <input className="pin-popup-input" autoFocus placeholder="Place name..." value={popupName}
+                  onChange={(e) => setPopupName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && confirmPin()} />
                 <div style={{ display: "flex", gap: 6 }}>
-                  <button className="pin-popup-btn secondary" onClick={() => setPending(null)}>
-                    Cancel
-                  </button>
-                  <button className="pin-popup-btn" onClick={confirmPin}>
-                    Save to Wishlist
-                  </button>
+                  <button className="pin-popup-btn secondary" onClick={() => setPending(null)}>Cancel</button>
+                  <button className="pin-popup-btn" onClick={confirmPin}>Save to Wishlist</button>
                 </div>
               </>
             ) : (
               <>
                 <div className="pin-popup-title" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <span>📍 New Stop</span>
-                  <button className="wish-instead-btn" onClick={confirmAsWish} title="Save as wishlist star instead">
-                    ★ Wishlist instead
-                  </button>
+                  <button className="wish-instead-btn" onClick={confirmAsWish}>★ Wishlist instead</button>
                 </div>
-                <input
-                  className="pin-popup-input"
-                  autoFocus
-                  placeholder="Place name..."
-                  value={popupName}
-                  onChange={(e) => setPopupName(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && confirmPin()}
-                />
+                <input className="pin-popup-input" autoFocus placeholder="Place name..." value={popupName}
+                  onChange={(e) => setPopupName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && confirmPin()} />
                 <div className="pin-popup-row">
                   <label className="pin-popup-label">Time</label>
-                  <input
-                    className="pin-popup-input"
-                    type="time"
-                    value={popupTime}
-                    onChange={(e) => setPopupTime(e.target.value)}
-                  />
+                  <input className="pin-popup-input" type="time" value={popupTime} onChange={(e) => setPopupTime(e.target.value)} />
                 </div>
                 <div className="pin-popup-row">
                   <label className="pin-popup-label">Type</label>
-                  <select
-                    className="pin-popup-select"
-                    value={popupType}
-                    onChange={(e) => setPopupType(e.target.value)}
-                  >
+                  <select className="pin-popup-select" value={popupType} onChange={(e) => setPopupType(e.target.value)}>
                     <option value="">Add Label</option>
-                    {STOP_TYPES.map((t) => (
-                      <option key={t} value={t}>
-                        {t.charAt(0).toUpperCase() + t.slice(1)}
-                      </option>
-                    ))}
+                    {STOP_TYPES.map((t) => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
                   </select>
                 </div>
-                <select
-                  className="pin-popup-select"
-                  value={popupDay ?? ""}
-                  onChange={(e) => setPopupDay(+e.target.value)}
-                >
-                  {days.map((d) => (
-                    <option key={d.id} value={d.id}>
-                      {d.label} — {d.date}
-                    </option>
-                  ))}
+                <select className="pin-popup-select" value={popupDay ?? ""} onChange={(e) => setPopupDay(+e.target.value)}>
+                  {days.map((d) => <option key={d.id} value={d.id}>{d.label} — {d.date}</option>)}
                 </select>
                 <div style={{ display: "flex", gap: 6 }}>
-                  <button className="pin-popup-btn secondary" onClick={() => setPending(null)}>
-                    Cancel
-                  </button>
-                  <button className="pin-popup-btn" onClick={confirmPin}>
-                    Add to Itinerary
-                  </button>
+                  <button className="pin-popup-btn secondary" onClick={() => setPending(null)}>Cancel</button>
+                  <button className="pin-popup-btn" onClick={confirmPin}>Add to Itinerary</button>
                 </div>
               </>
             )}
@@ -953,16 +805,16 @@ function App({ trip, onUpdate, onOpenTripMenu }) {
 
 // ── DayBlock ───────────────────────────────────────────────────
 
-function DayBlock({
-  day, pins, highlighted,
-  onFocus, onRemovePin, onRemoveDay,
-  onDateChange, onAddStop,
-  onTimeChange, onNameChange, onNotesChange, onTypeChange,
-}) {
+function DayBlock({ day, dayIdx, pins, highlighted, onFocus, onRemovePin, onRemoveDay, onDateChange, onAddStop, onTimeChange, onNameChange, onNotesChange, onTypeChange }) {
   const [input, setInput] = useState("");
   const [time, setTime] = useState("09:00");
   const [type, setType] = useState("");
   const [editingId, setEditingId] = useState(null);
+  const [collapsed, setCollapsed] = useState(false);
+
+  const bgColor = DAY_BG_COLORS[dayIdx % DAY_BG_COLORS.length];
+  const borderColor = DAY_BORDER_COLORS[dayIdx % DAY_BORDER_COLORS.length];
+  const accentColor = DAY_COLORS[dayIdx % DAY_COLORS.length];
 
   const stops = (day.stops || [])
     .map((sid) => pins.find((p) => p.id === sid))
@@ -970,141 +822,101 @@ function DayBlock({
     .sort((a, b) => (a.time || "00:00").localeCompare(b.time || "00:00"));
 
   return (
-    <div className="day-block">
+    <div className="day-block" style={{ background: bgColor, borderColor: borderColor }}>
       <div className="day-header">
-        <div>
-          <div className="day-label">{day.label}</div>
-          <input
-            className="day-date-input"
-            type="date"
-            value={day.date}
-            onChange={(e) => onDateChange(e.target.value)}
-          />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div className="day-label" style={{ color: accentColor }}>{day.label}</div>
+          <input className="day-date-input" type="date" value={day.date} onChange={(e) => onDateChange(e.target.value)} />
         </div>
-        <button className="btn-icon" onClick={() => onRemoveDay(day.id)}>✕ remove</button>
-      </div>
-
-      <div className="stops-list">
-        {stops.length === 0 && (
-          <div className="empty">No stops yet — click the map or type below</div>
-        )}
-        {stops.map((s) => (
-          <div
-            key={s.id}
-            className={`stop-item${highlighted === s.id ? " highlighted" : ""}`}
-            onClick={() => onFocus(s.id)}
+        <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
+          <button
+            className="btn-icon"
+            onClick={() => setCollapsed((v) => !v)}
+            title={collapsed ? "Expand" : "Collapse"}
+            style={{ fontSize: 14 }}
           >
-            <div className="stop-num">
-              {s.type === "flight" ? "✈️"
-                : s.type === "hotel" ? "🏨"
-                : s.type === "food" ? "🍜"
-                : s.label}
-            </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              {editingId === s.id ? (
-                <input
-                  className="stop-name-input"
-                  autoFocus
-                  value={s.name}
-                  onClick={(e) => e.stopPropagation()}
-                  onChange={(e) => { e.stopPropagation(); onNameChange(s.id, e.target.value); }}
-                  onBlur={() => setEditingId(null)}
-                  onKeyDown={(e) => e.key === "Enter" && setEditingId(null)}
-                />
-              ) : (
-                <div
-                  className="stop-name"
-                  onClick={(e) => { e.stopPropagation(); setEditingId(s.id); }}
-                  title="Click to edit name"
-                >
-                  {s.name}
-                  <span className="stop-name-edit-hint">
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M12 20h9"/>
-                      <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>
-                    </svg>
-                  </span>
-                </div>
-              )}
-              <div className="stop-meta">
-                <input
-                  className="time-input"
-                  type="time"
-                  value={s.time || "09:00"}
-                  onClick={(e) => e.stopPropagation()}
-                  onChange={(e) => { e.stopPropagation(); onTimeChange(s.id, e.target.value); }}
-                />
-                <select
-                  className="type-select"
-                  value={s.type || ""}
-                  onClick={(e) => e.stopPropagation()}
-                  onChange={(e) => { e.stopPropagation(); onTypeChange(s.id, e.target.value); }}
-                >
-                  <option value="">Add Label</option>
-                  {STOP_TYPES.map((t) => (
-                    <option key={t} value={t}>
-                      {t.charAt(0).toUpperCase() + t.slice(1)}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <textarea
-                className="stop-notes"
-                placeholder="Add notes..."
-                value={s.notes || ""}
-                rows={s.notes ? s.notes.split("\n").length + 1 : 1}
-                onClick={(e) => e.stopPropagation()}
-                onChange={(e) => { e.stopPropagation(); onNotesChange(s.id, e.target.value); }}
-              />
-            </div>
-            <button
-              className="stop-remove"
-              onClick={(e) => { e.stopPropagation(); onRemovePin(s.id); }}
-            >
-              ✕
-            </button>
-          </div>
-        ))}
+            {collapsed ? "▶" : "▼"}
+          </button>
+          <button className="btn-icon" onClick={() => onRemoveDay(day.id)}>✕</button>
+        </div>
       </div>
 
-      <div className="add-stop-row">
-        <input
-          className="add-stop-input"
-          placeholder="Stop name..."
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              onAddStop(input, time, type);
-              setInput("");
-            }
-          }}
-        />
-        <input
-          className="add-time-input"
-          type="time"
-          value={time}
-          onChange={(e) => setTime(e.target.value)}
-        />
-        <select
-          className="add-type-select"
-          value={type}
-          onChange={(e) => setType(e.target.value)}
-        >
-          <option value="">Label</option>
-          {STOP_TYPES.map((t) => (
-            <option key={t} value={t}>
-              {t.charAt(0).toUpperCase() + t.slice(1)}
-            </option>
-          ))}
-        </select>
-        <button
-          className="btn-add"
-          onClick={() => { onAddStop(input, time, type); setInput(""); }}
-        >
-          +
-        </button>
-      </div>
+      {!collapsed && (
+        <>
+          <div className="stops-list">
+            {stops.length === 0 && <div className="empty">No stops yet — click the map or type below</div>}
+            {stops.map((s) => (
+              <div
+                key={s.id}
+                className={`stop-item${highlighted === s.id ? " highlighted" : ""}`}
+                onClick={() => onFocus(s.id)}
+              >
+                <div className="stop-num" style={{ background: accentColor }}>
+                  {s.type === "flight" ? "✈️" : s.type === "hotel" ? "🏨" : s.type === "food" ? "🍜" : s.label}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  {editingId === s.id ? (
+                    <input
+                      className="stop-name-input"
+                      autoFocus
+                      value={s.name}
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={(e) => { e.stopPropagation(); onNameChange(s.id, e.target.value); }}
+                      onBlur={() => setEditingId(null)}
+                      onKeyDown={(e) => e.key === "Enter" && setEditingId(null)}
+                    />
+                  ) : (
+                    <div className="stop-name" onClick={(e) => { e.stopPropagation(); setEditingId(s.id); }} title="Click to edit name">
+                      {s.name}
+                      <span className="stop-name-edit-hint">
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>
+                        </svg>
+                      </span>
+                    </div>
+                  )}
+                  <div className="stop-meta">
+                    <input className="time-input" type="time" value={s.time || "09:00"}
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={(e) => { e.stopPropagation(); onTimeChange(s.id, e.target.value); }} />
+                    <select className="type-select" value={s.type || ""}
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={(e) => { e.stopPropagation(); onTypeChange(s.id, e.target.value); }}>
+                      <option value="">Add Label</option>
+                      {STOP_TYPES.map((t) => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
+                    </select>
+                  </div>
+                  <textarea
+                    className="stop-notes"
+                    placeholder="Add notes..."
+                    value={s.notes || ""}
+                    rows={s.notes ? s.notes.split("\n").length + 1 : 1}
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={(e) => { e.stopPropagation(); onNotesChange(s.id, e.target.value); }}
+                  />
+                </div>
+                <button className="stop-remove" onClick={(e) => { e.stopPropagation(); onRemovePin(s.id); }}>✕</button>
+              </div>
+            ))}
+          </div>
+
+          <div className="add-stop-row">
+            <input
+              className="add-stop-input"
+              placeholder="Stop name..."
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") { onAddStop(input, time, type); setInput(""); } }}
+            />
+            <input className="add-time-input" type="time" value={time} onChange={(e) => setTime(e.target.value)} />
+            <select className="add-type-select" value={type} onChange={(e) => setType(e.target.value)}>
+              <option value="">Label</option>
+              {STOP_TYPES.map((t) => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
+            </select>
+            <button className="btn-add" onClick={() => { onAddStop(input, time, type); setInput(""); }}>+</button>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -1113,7 +925,6 @@ function DayBlock({
 
 function CostsTab({ pins, days, onCostChange }) {
   const groups = { flight: [], hotel: [], activity: [], food: [] };
-
   days.forEach((day) => {
     (day.stops || []).forEach((sid) => {
       const pin = pins.find((p) => p.id === sid);
@@ -1122,20 +933,9 @@ function CostsTab({ pins, days, onCostChange }) {
       if (groups[t]) groups[t].push({ ...pin, dayLabel: day.label });
     });
   });
-
-  const typeLabels = {
-    flight: "✈️ Flights",
-    hotel: "🏨 Hotels",
-    activity: "🎯 Activities",
-    food: "🍜 Food & Dining",
-  };
-
-  function subtotal(arr) {
-    return arr.reduce((sum, p) => sum + (parseFloat(p.cost) || 0), 0);
-  }
-
+  const typeLabels = { flight: "✈️ Flights", hotel: "🏨 Hotels", activity: "🎯 Activities", food: "🍜 Food & Dining" };
+  function subtotal(arr) { return arr.reduce((sum, p) => sum + (parseFloat(p.cost) || 0), 0); }
   const grandTotal = Object.values(groups).reduce((s, arr) => s + subtotal(arr), 0);
-
   return (
     <div className="costs-tab">
       {Object.entries(groups).map(([type, items]) => (
@@ -1158,15 +958,8 @@ function CostsTab({ pins, days, onCostChange }) {
                     <td className="cost-input-cell">
                       <div className="cost-input-wrap">
                         <span className="cost-dollar">$</span>
-                        <input
-                          className="cost-input"
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          placeholder="0.00"
-                          value={pin.cost || ""}
-                          onChange={(e) => onCostChange(pin.id, e.target.value)}
-                        />
+                        <input className="cost-input" type="number" min="0" step="0.01" placeholder="0.00"
+                          value={pin.cost || ""} onChange={(e) => onCostChange(pin.id, e.target.value)} />
                       </div>
                     </td>
                   </tr>
