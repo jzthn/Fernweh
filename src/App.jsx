@@ -2,6 +2,34 @@ import { useState, useEffect, useRef } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import "./App.css";
+import { createClient } from "@supabase/supabase-js";
+
+// ── Supabase client ────────────────────────────────────────────
+// Replace these two values with your own from supabase.com → Settings → API
+const supabase = createClient(
+  "https://YOUR_PROJECT.supabase.co",
+  "YOUR_ANON_KEY"
+);
+
+const STORAGE_KEY = "fernweh_all";
+
+async function loadFromDB() {
+  const { data, error } = await supabase
+    .from("app_data")
+    .select("data")
+    .eq("id", STORAGE_KEY)
+    .single();
+  if (error || !data) return null;
+  return data.data;
+}
+
+async function saveToDB(payload) {
+  await supabase
+    .from("app_data")
+    .upsert({ id: STORAGE_KEY, data: payload, updated_at: new Date().toISOString() });
+}
+
+// ── Constants ──────────────────────────────────────────────────
 
 const DAY_COLORS = [
   "#c8f55a", "#7eb3ff", "#ff9f7e",
@@ -17,6 +45,8 @@ const TYPE_ICON = {
   hotel: "🏨",
   food: "🍜",
 };
+
+// ── Map helpers ────────────────────────────────────────────────
 
 function makeIcon(label, color, type) {
   const icon =
@@ -76,17 +106,7 @@ function makeStarIcon() {
   });
 }
 
-// ── Storage helpers ────────────────────────────────────────────
-
-function loadAll() {
-  try {
-    return JSON.parse(localStorage.getItem("fernweh_all") || "null");
-  } catch { return null; }
-}
-
-function saveAll(data) {
-  localStorage.setItem("fernweh_all", JSON.stringify(data));
-}
+// ── Data helpers ───────────────────────────────────────────────
 
 function emptyTrip(name) {
   return {
@@ -130,24 +150,59 @@ function reindexPins(days, pins) {
   return pins.map((pin) => ({ ...pin, label: labelMap[pin.id] ?? "?" }));
 }
 
-// ── Root: manages which trip is active ────────────────────────
+// ── Root ───────────────────────────────────────────────────────
 
 export default function Root() {
-  const [allData, setAllData] = useState(() => {
-    const saved = loadAll();
-    if (saved && saved.trips && saved.trips.length > 0) return saved;
-    const first = emptyTrip("Japan 2025");
-    return { activeId: first.id, trips: [first] };
-  });
+  const [allData, setAllData] = useState(null);
+  const [loaded, setLoaded] = useState(false);
   const [showTripMenu, setShowTripMenu] = useState(false);
   const [newTripName, setNewTripName] = useState("");
-  const [renamingId, setRenamingId] = useState(null);
-  const [renameVal, setRenameVal] = useState("");
+  const saveTimerRef = useRef(null);
 
-  useEffect(() => { saveAll(allData); }, [allData]);
+  // Load from Supabase on mount
+  useEffect(() => {
+    loadFromDB().then((saved) => {
+      if (saved && saved.trips && saved.trips.length > 0) {
+        setAllData(saved);
+      } else {
+        const first = emptyTrip("Japan 2025");
+        setAllData({ activeId: first.id, trips: [first] });
+      }
+      setLoaded(true);
+    });
+  }, []);
 
-  const activeTrip = allData.trips.find((t) => t.id === allData.activeId)
-    || allData.trips[0];
+  // Save to Supabase whenever allData changes, debounced 800ms
+  useEffect(() => {
+    if (!loaded || !allData) return;
+    clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      saveToDB(allData);
+    }, 800);
+    return () => clearTimeout(saveTimerRef.current);
+  }, [allData, loaded]);
+
+  if (!loaded) {
+    return (
+      <div style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        height: "100vh",
+        background: "#0f0f13",
+        color: "#888794",
+        fontSize: "14px",
+        gap: "10px",
+      }}>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#c8f55a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+        </svg>
+        Loading your trips...
+      </div>
+    );
+  }
+
+  const activeTrip = allData.trips.find((t) => t.id === allData.activeId) || allData.trips[0];
 
   function updateTrip(updatedTrip) {
     setAllData((prev) => ({
@@ -177,22 +232,6 @@ export default function Root() {
     });
   }
 
-  function startRename(trip) {
-    setRenamingId(trip.id);
-    setRenameVal(trip.tripName);
-  }
-
-  function commitRename(id) {
-    if (!renameVal.trim()) return;
-    setAllData((prev) => ({
-      ...prev,
-      trips: prev.trips.map((t) =>
-        t.id === id ? { ...t, tripName: renameVal.trim() } : t
-      ),
-    }));
-    setRenamingId(null);
-  }
-
   return (
     <>
       {showTripMenu && (
@@ -220,7 +259,13 @@ export default function Root() {
                   </span>
                   <div className="trip-list-actions">
                     {allData.trips.length > 1 && (
-                      <button className="trip-action-btn danger" onClick={() => deleteTrip(trip.id)} title="Delete">✕</button>
+                      <button
+                        className="trip-action-btn danger"
+                        onClick={() => deleteTrip(trip.id)}
+                        title="Delete"
+                      >
+                        ✕
+                      </button>
                     )}
                   </div>
                 </div>
@@ -251,7 +296,7 @@ export default function Root() {
   );
 }
 
-// ── Main App ───────────────────────────────────────────────────
+// ── App ────────────────────────────────────────────────────────
 
 function App({ trip, onUpdate, onOpenTripMenu }) {
   const [tripName, setTripName] = useState(trip.tripName);
@@ -296,7 +341,7 @@ function App({ trip, onUpdate, onOpenTripMenu }) {
     }
   }, [editingTitle]);
 
-  // Sync state up to parent whenever anything changes
+  // Sync state up to Root (which saves to Supabase)
   useEffect(() => {
     onUpdate({ ...trip, tripName, days, pins, wishlist, nextDayId, nextPinId });
   }, [tripName, days, pins, wishlist, nextDayId, nextPinId]);
@@ -343,7 +388,10 @@ function App({ trip, onUpdate, onOpenTripMenu }) {
     const map = L.map(mapRef.current, { zoomControl: false });
 
     if (geoPins.length > 0) {
-      map.fitBounds(L.latLngBounds(geoPins.map((p) => [p.lat, p.lng])), { padding: [60, 60] });
+      map.fitBounds(
+        L.latLngBounds(geoPins.map((p) => [p.lat, p.lng])),
+        { padding: [60, 60] }
+      );
     } else {
       map.setView([35.68, 139.69], 5);
     }
@@ -415,10 +463,7 @@ function App({ trip, onUpdate, onOpenTripMenu }) {
       if (pin.lat !== null) addMarkerToMap(pin, daysRef.current, map);
     });
 
-    // Restore wishlist markers
-    wishlistRef.current.forEach((w) => {
-      placeWishMarker(w, map);
-    });
+    wishlistRef.current.forEach((w) => placeWishMarker(w, map));
 
     return () => {
       map.remove();
@@ -453,7 +498,7 @@ function App({ trip, onUpdate, onOpenTripMenu }) {
       return `
         <div style="font-family:sans-serif;font-size:13px;min-width:180px">
           <div style="font-weight:600;margin-bottom:6px">⭐ Wishlist</div>
-          <input id="wish-input-${id}" value="${name.replace(/"/g, '&quot;')}"
+          <input id="wish-input-${id}" value="${name.replace(/"/g, "&quot;")}"
             style="width:100%;padding:6px 8px;border:1px solid #ccc;border-radius:6px;margin-bottom:8px;font-size:12px;" />
           <div style="display:flex;gap:6px">
             <button id="save-wish-${id}" style="flex:1;font-size:12px;cursor:pointer;background:#eef8ee;border:1px solid #b7ddb7;border-radius:6px;padding:5px 8px;color:#2a7a2a">Save</button>
@@ -568,7 +613,10 @@ function App({ trip, onUpdate, onOpenTripMenu }) {
       : `Delete ${day.label}?`;
     if (!window.confirm(msg)) return;
     day.stops.forEach((sid) => {
-      if (markersRef.current[sid]) { markersRef.current[sid].remove(); delete markersRef.current[sid]; }
+      if (markersRef.current[sid]) {
+        markersRef.current[sid].remove();
+        delete markersRef.current[sid];
+      }
     });
     const remainingPins = pins.filter((p) => !day.stops.includes(p.id));
     const remainingDays = days.filter((d) => d.id !== dayId);
@@ -579,9 +627,16 @@ function App({ trip, onUpdate, onOpenTripMenu }) {
   function addManualStop(dayId, name, time, type) {
     if (!name.trim()) return;
     const pin = {
-      id: nextPinId, label: "?", name: name.trim(),
-      time: time || "09:00", type: type || "activity",
-      notes: "", cost: "", lat: null, lng: null, dayId,
+      id: nextPinId,
+      label: "?",
+      name: name.trim(),
+      time: time || "09:00",
+      type: type || "activity",
+      notes: "",
+      cost: "",
+      lat: null,
+      lng: null,
+      dayId,
     };
     const newDays = days.map((d) =>
       d.id === dayId ? { ...d, stops: [...d.stops, pin.id] } : d
@@ -609,7 +664,10 @@ function App({ trip, onUpdate, onOpenTripMenu }) {
   }
 
   function updateStopType(pinId, type) {
-    const reindexed = reindexPins(days, pins.map((p) => (p.id === pinId ? { ...p, type } : p)));
+    const reindexed = reindexPins(
+      days,
+      pins.map((p) => (p.id === pinId ? { ...p, type } : p))
+    );
     setPins(reindexed);
     const pin = reindexed.find((p) => p.id === pinId);
     if (pin && pin.lat !== null && markersRef.current[pinId]) {
@@ -644,7 +702,7 @@ function App({ trip, onUpdate, onOpenTripMenu }) {
       } else {
         setSearchResults(data);
       }
-    } catch (err) {
+    } catch {
       setSearchError("Search failed.");
     } finally {
       setSearchLoading(false);
@@ -683,16 +741,22 @@ function App({ trip, onUpdate, onOpenTripMenu }) {
             ) : (
               <div className="title-row">
                 <div className="app-title">{tripName}</div>
-                <button className="title-edit-btn" onClick={() => setEditingTitle(true)} title="Edit trip name">
+                <button
+                  className="title-edit-btn"
+                  onClick={() => setEditingTitle(true)}
+                  title="Edit trip name"
+                >
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>
+                    <path d="M12 20h9"/>
+                    <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>
                   </svg>
                 </button>
               </div>
             )}
             <button className="trips-menu-btn" onClick={onOpenTripMenu} title="All trips">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>
+                <rect x="2" y="3" width="20" height="14" rx="2"/>
+                <path d="M8 21h8M12 17v4"/>
               </svg>
               Trips
             </button>
@@ -700,10 +764,16 @@ function App({ trip, onUpdate, onOpenTripMenu }) {
         </div>
 
         <div className="tabs">
-          <button className={`tab${tab === "itinerary" ? " active" : ""}`} onClick={() => setTab("itinerary")}>
+          <button
+            className={`tab${tab === "itinerary" ? " active" : ""}`}
+            onClick={() => setTab("itinerary")}
+          >
             Itinerary
           </button>
-          <button className={`tab${tab === "costs" ? " active" : ""}`} onClick={() => setTab("costs")}>
+          <button
+            className={`tab${tab === "costs" ? " active" : ""}`}
+            onClick={() => setTab("costs")}
+          >
             Costs
           </button>
         </div>
@@ -720,7 +790,9 @@ function App({ trip, onUpdate, onOpenTripMenu }) {
                   onFocus={focusPin}
                   onRemovePin={removePin}
                   onRemoveDay={removeDay}
-                  onDateChange={(date) => setDays(days.map((d) => (d.id === day.id ? { ...d, date } : d)))}
+                  onDateChange={(date) =>
+                    setDays(days.map((d) => (d.id === day.id ? { ...d, date } : d)))
+                  }
                   onAddStop={(name, time, type) => addManualStop(day.id, name, time, type)}
                   onTimeChange={updateStopTime}
                   onNameChange={updateStopName}
@@ -746,7 +818,10 @@ function App({ trip, onUpdate, onOpenTripMenu }) {
                 className="map-search-input"
                 placeholder="Search a place..."
                 value={searchQuery}
-                onChange={(e) => { setSearchQuery(e.target.value); if (!e.target.value) setSearchResults([]); }}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  if (!e.target.value) setSearchResults([]);
+                }}
               />
               <button className="map-search-btn" type="submit">
                 {searchLoading ? "..." : "Search"}
@@ -756,8 +831,14 @@ function App({ trip, onUpdate, onOpenTripMenu }) {
               <div className="search-results-dropdown">
                 {searchError && <div className="search-error">{searchError}</div>}
                 {searchResults.map((r) => (
-                  <div key={r.place_id} className="search-result-item" onClick={() => selectSearchResult(r)}>
-                    <div className="search-result-name">{r.name || r.display_name.split(",")[0]}</div>
+                  <div
+                    key={r.place_id}
+                    className="search-result-item"
+                    onClick={() => selectSearchResult(r)}
+                  >
+                    <div className="search-result-name">
+                      {r.name || r.display_name.split(",")[0]}
+                    </div>
                     <div className="search-result-addr">{r.display_name}</div>
                   </div>
                 ))}
@@ -771,7 +852,10 @@ function App({ trip, onUpdate, onOpenTripMenu }) {
             <strong>Click to drop pin</strong>
             Right-click to wishlist ⭐
           </div>
-          <button className={`clear-btn${showRoute ? " active-btn" : ""}`} onClick={() => setShowRoute((v) => !v)}>
+          <button
+            className={`clear-btn${showRoute ? " active-btn" : ""}`}
+            onClick={() => setShowRoute((v) => !v)}
+          >
             {showRoute ? "✕ Hide route" : "⟶ Show route"}
           </button>
           <button className="clear-btn" onClick={clearAll}>✕ Clear all pins</button>
@@ -791,19 +875,19 @@ function App({ trip, onUpdate, onOpenTripMenu }) {
                   onKeyDown={(e) => e.key === "Enter" && confirmPin()}
                 />
                 <div style={{ display: "flex", gap: 6 }}>
-                  <button className="pin-popup-btn secondary" onClick={() => setPending(null)}>Cancel</button>
-                  <button className="pin-popup-btn" onClick={confirmPin}>Save to Wishlist</button>
+                  <button className="pin-popup-btn secondary" onClick={() => setPending(null)}>
+                    Cancel
+                  </button>
+                  <button className="pin-popup-btn" onClick={confirmPin}>
+                    Save to Wishlist
+                  </button>
                 </div>
               </>
             ) : (
               <>
                 <div className="pin-popup-title" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <span>📍 New Stop</span>
-                  <button
-                    className="wish-instead-btn"
-                    onClick={confirmAsWish}
-                    title="Save as wishlist star instead"
-                  >
+                  <button className="wish-instead-btn" onClick={confirmAsWish} title="Save as wishlist star instead">
                     ★ Wishlist instead
                   </button>
                 </div>
@@ -826,21 +910,37 @@ function App({ trip, onUpdate, onOpenTripMenu }) {
                 </div>
                 <div className="pin-popup-row">
                   <label className="pin-popup-label">Type</label>
-                  <select className="pin-popup-select" value={popupType} onChange={(e) => setPopupType(e.target.value)}>
+                  <select
+                    className="pin-popup-select"
+                    value={popupType}
+                    onChange={(e) => setPopupType(e.target.value)}
+                  >
                     <option value="">Add Label</option>
                     {STOP_TYPES.map((t) => (
-                      <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>
+                      <option key={t} value={t}>
+                        {t.charAt(0).toUpperCase() + t.slice(1)}
+                      </option>
                     ))}
                   </select>
                 </div>
-                <select className="pin-popup-select" value={popupDay ?? ""} onChange={(e) => setPopupDay(+e.target.value)}>
+                <select
+                  className="pin-popup-select"
+                  value={popupDay ?? ""}
+                  onChange={(e) => setPopupDay(+e.target.value)}
+                >
                   {days.map((d) => (
-                    <option key={d.id} value={d.id}>{d.label} — {d.date}</option>
+                    <option key={d.id} value={d.id}>
+                      {d.label} — {d.date}
+                    </option>
                   ))}
                 </select>
                 <div style={{ display: "flex", gap: 6 }}>
-                  <button className="pin-popup-btn secondary" onClick={() => setPending(null)}>Cancel</button>
-                  <button className="pin-popup-btn" onClick={confirmPin}>Add to Itinerary</button>
+                  <button className="pin-popup-btn secondary" onClick={() => setPending(null)}>
+                    Cancel
+                  </button>
+                  <button className="pin-popup-btn" onClick={confirmPin}>
+                    Add to Itinerary
+                  </button>
                 </div>
               </>
             )}
@@ -853,7 +953,12 @@ function App({ trip, onUpdate, onOpenTripMenu }) {
 
 // ── DayBlock ───────────────────────────────────────────────────
 
-function DayBlock({ day, pins, highlighted, onFocus, onRemovePin, onRemoveDay, onDateChange, onAddStop, onTimeChange, onNameChange, onNotesChange, onTypeChange }) {
+function DayBlock({
+  day, pins, highlighted,
+  onFocus, onRemovePin, onRemoveDay,
+  onDateChange, onAddStop,
+  onTimeChange, onNameChange, onNotesChange, onTypeChange,
+}) {
   const [input, setInput] = useState("");
   const [time, setTime] = useState("09:00");
   const [type, setType] = useState("");
@@ -869,13 +974,20 @@ function DayBlock({ day, pins, highlighted, onFocus, onRemovePin, onRemoveDay, o
       <div className="day-header">
         <div>
           <div className="day-label">{day.label}</div>
-          <input className="day-date-input" type="date" value={day.date} onChange={(e) => onDateChange(e.target.value)} />
+          <input
+            className="day-date-input"
+            type="date"
+            value={day.date}
+            onChange={(e) => onDateChange(e.target.value)}
+          />
         </div>
         <button className="btn-icon" onClick={() => onRemoveDay(day.id)}>✕ remove</button>
       </div>
 
       <div className="stops-list">
-        {stops.length === 0 && <div className="empty">No stops yet — click the map or type below</div>}
+        {stops.length === 0 && (
+          <div className="empty">No stops yet — click the map or type below</div>
+        )}
         {stops.map((s) => (
           <div
             key={s.id}
@@ -883,7 +995,10 @@ function DayBlock({ day, pins, highlighted, onFocus, onRemovePin, onRemoveDay, o
             onClick={() => onFocus(s.id)}
           >
             <div className="stop-num">
-              {s.type === "flight" ? "✈️" : s.type === "hotel" ? "🏨" : s.type === "food" ? "🍜" : s.label}
+              {s.type === "flight" ? "✈️"
+                : s.type === "hotel" ? "🏨"
+                : s.type === "food" ? "🍜"
+                : s.label}
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               {editingId === s.id ? (
@@ -897,18 +1012,23 @@ function DayBlock({ day, pins, highlighted, onFocus, onRemovePin, onRemoveDay, o
                   onKeyDown={(e) => e.key === "Enter" && setEditingId(null)}
                 />
               ) : (
-                <div className="stop-name" onClick={(e) => { e.stopPropagation(); setEditingId(s.id); }} title="Click to edit name">
+                <div
+                  className="stop-name"
+                  onClick={(e) => { e.stopPropagation(); setEditingId(s.id); }}
+                  title="Click to edit name"
+                >
                   {s.name}
                   <span className="stop-name-edit-hint">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M12 20h9"/>
+                      <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>
                     </svg>
                   </span>
                 </div>
               )}
               <div className="stop-meta">
                 <input
-                  className="time-input no-cutoff"
+                  className="time-input"
                   type="time"
                   value={s.time || "09:00"}
                   onClick={(e) => e.stopPropagation()}
@@ -922,7 +1042,9 @@ function DayBlock({ day, pins, highlighted, onFocus, onRemovePin, onRemoveDay, o
                 >
                   <option value="">Add Label</option>
                   {STOP_TYPES.map((t) => (
-                    <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>
+                    <option key={t} value={t}>
+                      {t.charAt(0).toUpperCase() + t.slice(1)}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -935,7 +1057,12 @@ function DayBlock({ day, pins, highlighted, onFocus, onRemovePin, onRemoveDay, o
                 onChange={(e) => { e.stopPropagation(); onNotesChange(s.id, e.target.value); }}
               />
             </div>
-            <button className="stop-remove" onClick={(e) => { e.stopPropagation(); onRemovePin(s.id); }}>✕</button>
+            <button
+              className="stop-remove"
+              onClick={(e) => { e.stopPropagation(); onRemovePin(s.id); }}
+            >
+              ✕
+            </button>
           </div>
         ))}
       </div>
@@ -946,16 +1073,37 @@ function DayBlock({ day, pins, highlighted, onFocus, onRemovePin, onRemoveDay, o
           placeholder="Stop name..."
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter") { onAddStop(input, time, type); setInput(""); } }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              onAddStop(input, time, type);
+              setInput("");
+            }
+          }}
         />
-        <input className="add-time-input" type="time" value={time} onChange={(e) => setTime(e.target.value)} />
-        <select className="add-type-select" value={type} onChange={(e) => setType(e.target.value)}>
+        <input
+          className="add-time-input"
+          type="time"
+          value={time}
+          onChange={(e) => setTime(e.target.value)}
+        />
+        <select
+          className="add-type-select"
+          value={type}
+          onChange={(e) => setType(e.target.value)}
+        >
           <option value="">Label</option>
           {STOP_TYPES.map((t) => (
-            <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>
+            <option key={t} value={t}>
+              {t.charAt(0).toUpperCase() + t.slice(1)}
+            </option>
           ))}
         </select>
-        <button className="btn-add" onClick={() => { onAddStop(input, time, type); setInput(""); }}>+</button>
+        <button
+          className="btn-add"
+          onClick={() => { onAddStop(input, time, type); setInput(""); }}
+        >
+          +
+        </button>
       </div>
     </div>
   );
