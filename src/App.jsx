@@ -759,7 +759,7 @@ function App({ trip, onUpdate, onOpenTripMenu }) {
                   onChange={(e) => setPopupName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && confirmPin()} />
                 <div className="pin-popup-row">
                   <label className="pin-popup-label">Time</label>
-                  <input className="pin-popup-input" type="time" value={popupTime} onChange={(e) => setPopupTime(e.target.value)} />
+                  <TimeInput value={popupTime} onChange={setPopupTime} />
                 </div>
                 <div className="pin-popup-row">
                   <label className="pin-popup-label">Type</label>
@@ -780,6 +780,77 @@ function App({ trip, onUpdate, onOpenTripMenu }) {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function TimeInput({ value, onChange }) {
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState(value);
+
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function handleClick(e) {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [open]);
+
+  function handleOpen(e) {
+    e.stopPropagation();
+    setDraft(value);
+    setOpen(true);
+  }
+
+  function handleConfirm(e) {
+    e.stopPropagation();
+    onChange(draft);
+    setOpen(false);
+  }
+
+  return (
+    <div ref={ref} onClick={(e) => e.stopPropagation()} style={{ display: "flex", alignItems: "center", gap: 4, position: "relative" }}>
+      <span style={{ fontSize: 14, fontFamily: "monospace", color: "var(--text)", fontWeight: 600 }}>{value}</span>
+      <button onClick={handleOpen} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted)", padding: "0 2px", fontSize: 16, lineHeight: 1 }} title="Edit time">🕐</button>
+      {open && (
+        <div onClick={(e) => e.stopPropagation()} style={{
+          position: "absolute", top: "calc(100% + 6px)", left: 0, zIndex: 999,
+          background: "#1e1e28", border: "1px solid rgba(255,255,255,0.12)",
+          borderRadius: 10, padding: "12px 14px", display: "flex",
+          flexDirection: "column", gap: 10, boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
+          minWidth: 160,
+        }}>
+          <div style={{ fontSize: 11, color: "var(--muted)", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase" }}>Set time</div>
+          <input
+            type="time"
+            autoFocus
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") handleConfirm(e); if (e.key === "Escape") setOpen(false); }}
+            style={{
+              background: "#0f0f13", border: "1px solid rgba(255,255,255,0.12)",
+              borderRadius: 7, padding: "8px 10px", color: "var(--text)",
+              fontSize: 20, fontFamily: "monospace", fontWeight: 600,
+              outline: "none", width: "100%",
+            }}
+          />
+          <div style={{ display: "flex", gap: 6 }}>
+            <button onClick={(e) => { e.stopPropagation(); setOpen(false); }} style={{
+              flex: 1, background: "none", border: "1px solid rgba(255,255,255,0.1)",
+              borderRadius: 7, color: "var(--muted)", fontSize: 12, padding: "6px",
+              cursor: "pointer", fontFamily: "inherit",
+            }}>Cancel</button>
+            <button onClick={handleConfirm} style={{
+              flex: 1, background: "var(--accent)", border: "none",
+              borderRadius: 7, color: "#0f0f13", fontSize: 12, fontWeight: 700,
+              padding: "6px", cursor: "pointer", fontFamily: "inherit",
+            }}>Set</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -856,9 +927,7 @@ function DayBlock({ day, dayIdx, pins, highlighted, onFocus, onRemovePin, onRemo
                     </div>
                   )}
                   <div className="stop-meta">
-                    <input className="time-input" type="time" value={s.time || "09:00"}
-                      onClick={(e) => e.stopPropagation()}
-                      onChange={(e) => { e.stopPropagation(); onTimeChange(s.id, e.target.value); }} />
+                    <TimeInput value={s.time || "09:00"} onChange={(v) => onTimeChange(s.id, v)} />
                     <select className="type-select" value={s.type || ""}
                       onClick={(e) => e.stopPropagation()}
                       onChange={(e) => { e.stopPropagation(); onTypeChange(s.id, e.target.value); }}>
@@ -888,7 +957,7 @@ function DayBlock({ day, dayIdx, pins, highlighted, onFocus, onRemovePin, onRemo
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") { onAddStop(input, time, type); setInput(""); } }}
             />
-            <input className="add-time-input" type="time" value={time} onChange={(e) => setTime(e.target.value)} />
+            <TimeInput value={time} onChange={setTime} />
             <select className="add-type-select" value={type} onChange={(e) => setType(e.target.value)}>
               <option value="">Label</option>
               {STOP_TYPES.map((t) => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
