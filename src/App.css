@@ -1116,3 +1116,75 @@ body {
 .leaflet-container {
   background: #e8e0d8 !important;
 }
+
+/* ─────────────────────────────
+   MOBILE RESPONSIVE FIXES
+───────────────────────────── */
+
+@media (max-width: 900px) {
+
+  .app {
+    grid-template-columns: 1fr;
+    grid-template-rows: 55vh 45vh; /* map top, sidebar bottom */
+    height: 100dvh; /* better than 100vh on mobile */
+  }
+
+  /* Sidebar becomes bottom sheet style */
+  .sidebar {
+    border-right: none;
+    border-top: 1px solid var(--border);
+    overflow-y: auto;
+  }
+
+  /* Map area takes top half */
+  .map-area {
+    height: 55vh;
+  }
+
+  #map {
+    height: 100%;
+  }
+
+  /* Reduce padding for mobile */
+  .sidebar-header {
+    padding: 12px 14px;
+  }
+
+  .sidebar-body {
+    padding: 12px;
+  }
+
+  /* Make trip menu fit screen */
+  .trip-menu {
+    width: 92vw;
+    max-height: 85vh;
+  }
+
+  /* Search bar full width */
+  .map-search-bar {
+    width: calc(100% - 32px);
+    left: 16px;
+    right: 16px;
+  }
+
+  /* Pin popup smaller */
+  .pin-popup {
+    width: 92vw;
+    bottom: 20px;
+  }
+
+  /* Costs table overflow fix */
+  .cost-input {
+    width: 50px;
+  }
+
+  /* Prevent horizontal overflow issues */
+  body {
+    overflow-x: hidden;
+  }
+}
+
+
+html, body {
+  height: 100%;
+}
