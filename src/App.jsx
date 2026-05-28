@@ -384,7 +384,7 @@ function App({ trip, onUpdate, onOpenTripMenu }) {
       setPendingAsWish(false);
       setPopupTime("09:00");
       setPopupType("");
-      setPopupDay(daysRef.current[0]?.id ?? null);
+      setPopupDay(daysRef.current[daysRef.current.length - 1]?.id ?? null);
       setPopupName("Loading...");
       try {
         const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
@@ -735,7 +735,6 @@ function App({ trip, onUpdate, onOpenTripMenu }) {
           <button className={`clear-btn${showRoute ? " active-btn" : ""}`} onClick={() => setShowRoute((v) => !v)}>
             {showRoute ? "✕ Hide route" : "⟶ Show route"}
           </button>
-          <button className="clear-btn" onClick={clearAll}>✕ Clear all pins</button>
         </div>
 
         {pending && (
