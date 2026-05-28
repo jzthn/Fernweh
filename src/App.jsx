@@ -27,34 +27,16 @@ async function saveToDB(payload) {
     .upsert({ id: STORAGE_KEY, data: payload, updated_at: new Date().toISOString() });
 }
 
-const DAY_COLORS = [
-  "#c8f55a", "#7eb3ff", "#ff9f7e",
-  "#e878b8", "#78e8c8", "#ffcc55",
-  "#ff8888", "#aaaaff"
-];
-
-// Muted/dark versions of DAY_COLORS for sidebar backgrounds
-const DAY_BG_COLORS = [
-  "rgba(200,245,90,0.08)",
-  "rgba(126,179,255,0.08)",
-  "rgba(255,159,126,0.08)",
-  "rgba(232,120,184,0.08)",
-  "rgba(120,232,200,0.08)",
-  "rgba(255,204,85,0.08)",
-  "rgba(255,136,136,0.08)",
-  "rgba(170,170,255,0.08)",
-];
-
-const DAY_BORDER_COLORS = [
-  "rgba(200,245,90,0.25)",
-  "rgba(126,179,255,0.25)",
-  "rgba(255,159,126,0.25)",
-  "rgba(232,120,184,0.25)",
-  "rgba(120,232,200,0.25)",
-  "rgba(255,204,85,0.25)",
-  "rgba(255,136,136,0.25)",
-  "rgba(170,170,255,0.25)",
-];
+function generateDayColor(index) {
+  const hue = (index * 137.5) % 360; // golden angle — guarantees distinct, non-repeating hues
+  return {
+    accent: `hsl(${hue}, 70%, 72%)`,
+    bg: `hsla(${hue}, 40%, 55%, 0.22)`,
+    border: `hsla(${hue}, 40%, 55%, 0.18)`,
+    stopBg: '#2020208c',
+    stopBorder: `hsla(${hue}, 40%, 45%, 0.30)`,
+  };
+}
 
 const STOP_TYPES = ["activity", "flight", "hotel", "food"];
 
@@ -354,7 +336,7 @@ function App({ trip, onUpdate, onOpenTripMenu }) {
     indexed.forEach((pin) => {
       if (markersRef.current[pin.id] && pin.lat !== null) {
         const dayIdx = days.findIndex((d) => d.id === pin.dayId);
-        const color = DAY_COLORS[dayIdx % DAY_COLORS.length];
+        const color = generateDayColor(dayIdx).accent;
         markersRef.current[pin.id].setIcon(makeIcon(pin.label, color, pin.type));
       }
     });
@@ -371,7 +353,7 @@ function App({ trip, onUpdate, onOpenTripMenu }) {
         .filter((p) => p && p.lat !== null)
         .sort((a, b) => (a.time || "00:00").localeCompare(b.time || "00:00"));
       if (dayPins.length < 2) return;
-      const color = DAY_COLORS[dayIdx % DAY_COLORS.length];
+      const color = generateDayColor(dayIdx).accent;
       const line = L.polyline(
         dayPins.map((p) => [p.lat, p.lng]),
         { color, weight: 2.5, opacity: 0.7, dashArray: "6 4" }
@@ -442,7 +424,7 @@ function App({ trip, onUpdate, onOpenTripMenu }) {
   function addMarkerToMap(pin, currentDays, map) {
     const m = map || leafletMap.current;
     const dayIdx = currentDays.findIndex((d) => d.id === pin.dayId);
-    const color = DAY_COLORS[dayIdx % DAY_COLORS.length];
+    const color = generateDayColor(dayIdx).accent;
     const marker = L.marker([pin.lat, pin.lng], { icon: makeIcon(pin.label, color, pin.type) });
     marker.on("click", () => {
       setHighlighted(pin.id);
@@ -607,7 +589,7 @@ function App({ trip, onUpdate, onOpenTripMenu }) {
     const pin = reindexed.find((p) => p.id === pinId);
     if (pin && pin.lat !== null && markersRef.current[pinId]) {
       const dayIdx = days.findIndex((d) => d.id === pin.dayId);
-      const color = DAY_COLORS[dayIdx % DAY_COLORS.length];
+      const color = generateDayColor(dayIdx).accent;
       markersRef.current[pinId].setIcon(makeIcon(pin.label, color, pin.type));
     }
   }
@@ -812,9 +794,7 @@ function DayBlock({ day, dayIdx, pins, highlighted, onFocus, onRemovePin, onRemo
   const [editingId, setEditingId] = useState(null);
   const [collapsed, setCollapsed] = useState(false);
 
-  const bgColor = DAY_BG_COLORS[dayIdx % DAY_BG_COLORS.length];
-  const borderColor = DAY_BORDER_COLORS[dayIdx % DAY_BORDER_COLORS.length];
-  const accentColor = DAY_COLORS[dayIdx % DAY_COLORS.length];
+  const { accent: accentColor, bg: bgColor, border: borderColor, stopBg, stopBorder } = generateDayColor(dayIdx);
 
   const stops = (day.stops || [])
     .map((sid) => pins.find((p) => p.id === sid))
@@ -849,6 +829,7 @@ function DayBlock({ day, dayIdx, pins, highlighted, onFocus, onRemovePin, onRemo
               <div
                 key={s.id}
                 className={`stop-item${highlighted === s.id ? " highlighted" : ""}`}
+                style={{ background: stopBg, borderColor: stopBorder }}
                 onClick={() => onFocus(s.id)}
               >
                 <div className="stop-num" style={{ background: accentColor }}>

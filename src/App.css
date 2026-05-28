@@ -1032,8 +1032,8 @@ body {
 
   /* Map takes top 50% */
   .map-area {
-    flex: 0 0 50%;
-    height: 50dvh;
+    flex: 0 0 44%;
+    height: 44dvh;
     min-height: 0;
     position: relative;
   }
@@ -1045,8 +1045,8 @@ body {
 
   /* Sidebar takes bottom 50%, scrollable */
   .sidebar {
-    flex: 0 0 50%;
-    height: 50dvh;
+    flex: 0 0 56%;
+    height: 56dvh;
     min-height: 0;
     border-right: none;
     border-top: 1px solid var(--border);
