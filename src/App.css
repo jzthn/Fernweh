@@ -43,16 +43,24 @@ body {
 }
 
 .sidebar-header {
-  padding: 20px 20px 16px;
+  padding: 16px 20px 14px;
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
 
-/* Title row: title text + edit pen button side by side */
+.sidebar-header-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
 .title-row {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex: 1;
+  min-width: 0;
 }
 
 .app-title {
@@ -61,29 +69,24 @@ body {
   letter-spacing: 0.03em;
   color: #c478ea;
   line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .title-edit-btn {
   width: 26px;
   height: 26px;
-
   display: flex;
   align-items: center;
   justify-content: center;
-
   background: rgba(255,255,255,0.04);
-
   border: 1px solid transparent;
   border-radius: 7px;
-
   cursor: pointer;
-
   color: var(--muted);
-
-  transition:
-    background 0.15s,
-    border-color 0.15s,
-    color 0.15s;
+  flex-shrink: 0;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
 
 .title-edit-btn:hover {
@@ -92,7 +95,6 @@ body {
   color: var(--accent);
 }
 
-/* Inline editing input that replaces the title */
 .title-edit-input {
   font-size: 20px;
   font-weight: 800;
@@ -103,8 +105,216 @@ body {
   border-bottom: 2px solid var(--accent);
   outline: none;
   font-family: inherit;
-  width: 100%;
+  flex: 1;
   padding-bottom: 2px;
+}
+
+/* Trips menu button in header */
+.trips-menu-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--border2);
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+
+.trips-menu-btn:hover {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* ─── TRIP MENU OVERLAY ──────────────────────────────── */
+
+.trip-menu-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.55);
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.trip-menu {
+  background: var(--surface);
+  border: 1px solid var(--border2);
+  border-radius: 14px;
+  width: 380px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+  overflow: hidden;
+}
+
+.trip-menu-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.trip-menu-close {
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 16px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  transition: color 0.15s;
+}
+
+.trip-menu-close:hover {
+  color: var(--danger);
+}
+
+.trip-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border2) transparent;
+}
+
+.trip-list-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  transition: all 0.15s;
+}
+
+.trip-list-item:hover {
+  background: var(--surface2);
+  border-color: var(--border);
+}
+
+.trip-list-item.active-trip {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+}
+
+.trip-list-name {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.trip-list-item.active-trip .trip-list-name {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.trip-rename-input {
+  flex: 1;
+  background: var(--surface2);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  padding: 4px 8px;
+  color: var(--text);
+  font-size: 14px;
+  font-family: inherit;
+  outline: none;
+}
+
+.trip-list-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.trip-action-btn {
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 6px;
+  font-size: 13px;
+  transition: color 0.15s, background 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.trip-action-btn:hover {
+  color: var(--accent);
+  background: var(--accent-dim);
+}
+
+.trip-action-btn.danger:hover {
+  color: var(--danger);
+  background: rgba(255,107,107,0.1);
+}
+
+.trip-new-row {
+  display: flex;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+}
+
+.trip-new-input {
+  flex: 1;
+  background: var(--surface2);
+  border: 1px solid var(--border2);
+  border-radius: 8px;
+  padding: 8px 12px;
+  color: var(--text);
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+}
+
+.trip-new-input:focus {
+  border-color: var(--accent);
+}
+
+.trip-new-input::placeholder {
+  color: var(--muted);
+}
+
+.trip-new-btn {
+  background: var(--accent);
+  color: var(--accent-text);
+  border: none;
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  white-space: nowrap;
+  transition: opacity 0.15s;
+}
+
+.trip-new-btn:hover {
+  opacity: 0.85;
 }
 
 /* ─── TABS ─────────────────────────────────────────────── */
@@ -245,7 +455,6 @@ body {
   margin-top: 2px;
 }
 
-/* Stop name — clickable to edit */
 .stop-name {
   font-size: 13px;
   font-weight: 500;
@@ -266,7 +475,6 @@ body {
   opacity: 1;
 }
 
-/* Inline name edit input */
 .stop-name-input {
   font-size: 13px;
   font-weight: 500;
@@ -287,12 +495,10 @@ body {
   font-size: 11px;
   color: var(--muted);
   margin-top: 4px;
-  /* don't wrap — time + type select must stay on one line */
   flex-wrap: nowrap;
   overflow: hidden;
 }
 
-/* Time inline input inside stop meta */
 .time-input {
   background: none;
   border: none;
@@ -302,10 +508,8 @@ body {
   outline: none;
   cursor: pointer;
   padding: 0;
-  
   width: 118px;
   min-width: 118px;
-
   flex-shrink: 0;
   letter-spacing: 0.02em;
 }
@@ -314,38 +518,23 @@ body {
   color: var(--accent);
 }
 
-/* Type select inside stop meta — styled pill, not a raw dropdown */
 .type-select {
   background: #2a2a36;
   border: 1px solid rgba(255,255,255,0.12);
   border-radius: 999px;
-
   color: #f2f2f2;
-
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-
   font-family: inherit;
-
   outline: none;
-
   padding: 4px 26px 4px 10px;
-
   cursor: pointer;
-
   appearance: none;
   -webkit-appearance: none;
-
-  transition:
-    border-color 0.15s,
-    background 0.15s,
-    color 0.15s;
-
-  background-image:
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'%3E%3Cpath d='M0 0l4 5 4-5z' fill='%23cccccc'/%3E%3C/svg%3E");
-
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'%3E%3Cpath d='M0 0l4 5 4-5z' fill='%23cccccc'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 10px center;
 }
@@ -355,20 +544,6 @@ body {
   color: #f2f2f2;
 }
 
-.type-select:invalid {
-  color: #888794;
-}
-
-.type-select:hover {
-  border-color: rgba(200,245,90,0.4);
-  background: rgba(200,245,90,0.08);
-  color: var(--accent);
-}
-
-.type-select:focus {
-  border-color: var(--accent);
-}
-
 .type-select:hover {
   border-color: var(--accent);
   color: var(--accent);
@@ -378,7 +553,6 @@ body {
   border-color: var(--accent);
 }
 
-/* Notes textarea inside stop */
 .stop-notes {
   background: none;
   border: none;
@@ -469,7 +643,6 @@ body {
   border-color: var(--accent);
 }
 
-/* Type dropdown in add row */
 .add-type-select {
   background: var(--surface);
   border: 1px solid var(--border2);
@@ -484,11 +657,6 @@ body {
 
 .add-type-select:focus {
   border-color: var(--accent);
-}
-
-.no-cutoff {
-  width: 88px;
-  min-width: 88px;
 }
 
 .btn-add {
@@ -570,7 +738,6 @@ body {
   padding: 10px 14px;
 }
 
-/* Full-width table */
 .cost-table {
   width: 100%;
   border-collapse: collapse;
@@ -615,12 +782,8 @@ body {
   align-items: center;
   justify-content: flex-end;
   gap: 4px;
-
   padding-bottom: 3px;
-
   border-bottom: 1px solid rgba(255,255,255,0.16);
-
-  background: none;
 }
 
 .cost-dollar {
@@ -632,18 +795,12 @@ body {
 .cost-input {
   background: none;
   border: none;
-
   color: var(--text);
-
   font-size: 13px;
   font-family: 'DM Mono', monospace;
-
   outline: none;
-
   width: 58px;
-
   text-align: right;
-
   padding: 0;
 }
 
@@ -651,11 +808,6 @@ body {
   color: var(--accent);
 }
 
-.cost-input:focus {
-  color: var(--accent);
-}
-
-/* Hide number input arrows */
 .cost-input::-webkit-outer-spin-button,
 .cost-input::-webkit-inner-spin-button {
   -webkit-appearance: none;
@@ -666,7 +818,6 @@ body {
   -moz-appearance: textfield;
 }
 
-/* Grand total row */
 .cost-total-row {
   display: flex;
   justify-content: space-between;
@@ -679,20 +830,6 @@ body {
   font-weight: 700;
   color: var(--accent);
   font-family: 'DM Mono', monospace;
-}
-
-/* ─── HINT (empty states) ──────────────────────────────── */
-
-.hint {
-  font-size: 12px;
-  color: var(--muted);
-  text-align: center;
-  padding: 32px 16px;
-  line-height: 1.7;
-}
-
-.hint span {
-  color: var(--accent);
 }
 
 /* ─── MAP ──────────────────────────────────────────────── */
@@ -807,7 +944,7 @@ body {
   color: #e55;
 }
 
-/* ─── MAP OVERLAY (top right) ──────────────────────────── */
+/* ─── MAP OVERLAY ──────────────────────────────────────── */
 
 .map-overlay {
   position: absolute;
@@ -872,7 +1009,7 @@ body {
   border: 1px solid var(--border2);
   border-radius: 12px;
   padding: 16px;
-  width: 260px;
+  width: 280px;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -952,6 +1089,26 @@ body {
 .pin-popup-btn.secondary:hover {
   color: var(--text);
   opacity: 1;
+}
+
+/* "Wishlist instead" button inside the pin popup title row */
+.wish-instead-btn {
+  background: rgba(255,215,0,0.12);
+  border: 1px solid rgba(255,215,0,0.35);
+  border-radius: 6px;
+  color: #e6c000;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: inherit;
+  padding: 3px 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s;
+}
+
+.wish-instead-btn:hover {
+  background: rgba(255,215,0,0.22);
+  border-color: #e6c000;
 }
 
 /* ─── LEAFLET OVERRIDES ────────────────────────────────── */
