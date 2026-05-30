@@ -28,12 +28,12 @@ async function saveToDB(payload) {
 }
 
 function generateDayColor(index) {
-  const hue = (index * 137.5) % 360; // golden angle — guarantees distinct, non-repeating hues
+  const hue = (index * 137.5) % 360;
   return {
     accent: `hsl(${hue}, 70%, 72%)`,
     bg: `hsla(${hue}, 40%, 55%, 0.22)`,
     border: `hsla(${hue}, 40%, 55%, 0.18)`,
-    stopBg: '#2020208c',
+    stopBg: "#1e1e28",
     stopBorder: `hsla(${hue}, 40%, 45%, 0.30)`,
   };
 }
@@ -125,7 +125,6 @@ function addDaysToDate(dateStr, n) {
   return d.toISOString().split("T")[0];
 }
 
-// Sort days by date, then relabel Day 1, Day 2 etc in order
 function sortAndRelabelDays(days) {
   const sorted = [...days].sort((a, b) => {
     if (!a.date) return 1;
@@ -304,6 +303,7 @@ function App({ trip, onUpdate, onOpenTripMenu }) {
   const [searchResults, setSearchResults] = useState([]);
   const [searchError, setSearchError] = useState("");
   const [searchLoading, setSearchLoading] = useState(false);
+  const [planMode, setPlanMode] = useState(false);
 
   const mapRef = useRef(null);
   const leafletMap = useRef(null);
@@ -514,13 +514,6 @@ function App({ trip, onUpdate, onOpenTripMenu }) {
     setPins(newPins);
   }
 
-  function clearAll() {
-    Object.values(markersRef.current).forEach((m) => m.remove());
-    markersRef.current = {};
-    setPins([]);
-    setDays((ds) => ds.map((d) => ({ ...d, stops: [] })));
-  }
-
   function addDay() {
     const lastDay = days[days.length - 1];
     const newDate = lastDay ? addDaysToDate(lastDay.date, 1) : new Date().toISOString().split("T")[0];
@@ -628,161 +621,433 @@ function App({ trip, onUpdate, onOpenTripMenu }) {
     setPopupName(shortName);
     setPopupTime("09:00");
     setPopupType("");
-    setPopupDay(daysRef.current[0]?.id ?? null);
+    setPopupDay(daysRef.current[daysRef.current.length - 1]?.id ?? null);
     setSearchResults([]);
     setSearchQuery("");
   }
 
+  function handlePlanApply(newDays, newPins, newWishlist) {
+    Object.values(markersRef.current).forEach((m) => m.remove());
+    markersRef.current = {};
+    const indexed = reindexPins(newDays, newPins);
+    setDays(newDays);
+    setPins(indexed);
+    if (newWishlist !== undefined) setWishlist(newWishlist);
+    setTimeout(() => {
+      indexed.forEach((pin) => {
+        if (pin.lat !== null && pin.lat !== undefined) {
+          addMarkerToMap(pin, newDays);
+        }
+      });
+    }, 50);
+    setPlanMode(false);
+  }
+
   return (
-    <div className="app">
-      <div className="sidebar">
-        <div className="sidebar-header">
-          <div className="sidebar-header-top">
-            {editingTitle ? (
-              <input
-                ref={titleInputRef}
-                className="title-edit-input"
-                value={tripName}
-                onChange={(e) => setTripName(e.target.value)}
-                onBlur={() => setEditingTitle(false)}
-                onKeyDown={(e) => e.key === "Enter" && setEditingTitle(false)}
-              />
-            ) : (
-              <div className="title-row">
-                <div className="app-title">{tripName}</div>
-                <button className="title-edit-btn" onClick={() => setEditingTitle(true)} title="Edit trip name">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>
+    <>
+      {planMode && (
+        <PlanMode
+          days={days}
+          pins={pins}
+          wishlist={wishlist}
+          onClose={() => setPlanMode(false)}
+          onApply={handlePlanApply}
+        />
+      )}
+      <div className="app">
+        <div className="sidebar">
+          <div className="sidebar-header">
+            <div className="sidebar-header-top">
+              {editingTitle ? (
+                <input
+                  ref={titleInputRef}
+                  className="title-edit-input"
+                  value={tripName}
+                  onChange={(e) => setTripName(e.target.value)}
+                  onBlur={() => setEditingTitle(false)}
+                  onKeyDown={(e) => e.key === "Enter" && setEditingTitle(false)}
+                />
+              ) : (
+                <div className="title-row">
+                  <div className="app-title">{tripName}</div>
+                  <button className="title-edit-btn" onClick={() => setEditingTitle(true)} title="Edit trip name">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>
+                    </svg>
+                  </button>
+                </div>
+              )}
+              <button className="trips-menu-btn" onClick={onOpenTripMenu} title="All trips">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>
+                </svg>
+                Trips
+              </button>
+            </div>
+          </div>
+
+          <div className="tabs">
+            <button className={`tab${tab === "itinerary" ? " active" : ""}`} onClick={() => setTab("itinerary")}>Itinerary</button>
+            <button className={`tab${tab === "costs" ? " active" : ""}`} onClick={() => setTab("costs")}>Costs</button>
+          </div>
+
+          <div className="sidebar-body">
+            {tab === "itinerary" ? (
+              <>
+                <button className="plan-mode-btn" onClick={() => setPlanMode(true)} style={{ marginBottom: 14, flexShrink: 0 }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                    <path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2v-4M9 21H5a2 2 0 0 1-2-2v-4m0 0h18"/>
                   </svg>
+                  Order Stops
                 </button>
-              </div>
+                {days.map((day, dayIdx) => (
+                  <DayBlock
+                    key={day.id}
+                    day={day}
+                    dayIdx={dayIdx}
+                    pins={pins}
+                    highlighted={highlighted}
+                    onFocus={focusPin}
+                    onRemovePin={removePin}
+                    onRemoveDay={removeDay}
+                    onDateChange={(date) => handleDateChange(day.id, date)}
+                    onAddStop={(name, time, type) => addManualStop(day.id, name, time, type)}
+                    onTimeChange={updateStopTime}
+                    onNameChange={updateStopName}
+                    onNotesChange={updateStopNotes}
+                    onTypeChange={updateStopType}
+                  />
+                ))}
+                <button className="add-day-btn" onClick={addDay}>+ Add Day</button>
+              </>
+            ) : (
+              <CostsTab pins={pins} days={days} onCostChange={updateStopCost} />
             )}
-            <button className="trips-menu-btn" onClick={onOpenTripMenu} title="All trips">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>
-              </svg>
-              Trips
-            </button>
           </div>
         </div>
 
-        <div className="tabs">
-          <button className={`tab${tab === "itinerary" ? " active" : ""}`} onClick={() => setTab("itinerary")}>Itinerary</button>
-          <button className={`tab${tab === "costs" ? " active" : ""}`} onClick={() => setTab("costs")}>Costs</button>
-        </div>
-
-        <div className="sidebar-body">
-          {tab === "itinerary" ? (
-            <>
-              {days.map((day, dayIdx) => (
-                <DayBlock
-                  key={day.id}
-                  day={day}
-                  dayIdx={dayIdx}
-                  pins={pins}
-                  highlighted={highlighted}
-                  onFocus={focusPin}
-                  onRemovePin={removePin}
-                  onRemoveDay={removeDay}
-                  onDateChange={(date) => handleDateChange(day.id, date)}
-                  onAddStop={(name, time, type) => addManualStop(day.id, name, time, type)}
-                  onTimeChange={updateStopTime}
-                  onNameChange={updateStopName}
-                  onNotesChange={updateStopNotes}
-                  onTypeChange={updateStopType}
+        <div className="map-area">
+          <div ref={mapRef} id="map" />
+          <div className="map-search-bar">
+            <div style={{ position: "relative", flex: 1 }}>
+              <form onSubmit={handleSearch} style={{ display: "flex", gap: 6 }}>
+                <input
+                  className="map-search-input"
+                  placeholder="Search a place..."
+                  value={searchQuery}
+                  onChange={(e) => { setSearchQuery(e.target.value); if (!e.target.value) setSearchResults([]); }}
                 />
-              ))}
-              <button className="add-day-btn" onClick={addDay}>+ Add Day</button>
-            </>
-          ) : (
-            <CostsTab pins={pins} days={days} onCostChange={updateStopCost} />
+                <button className="map-search-btn" type="submit">{searchLoading ? "..." : "Search"}</button>
+              </form>
+              {(searchResults.length > 0 || searchError) && (
+                <div className="search-results-dropdown">
+                  {searchError && <div className="search-error">{searchError}</div>}
+                  {searchResults.map((r) => (
+                    <div key={r.place_id} className="search-result-item" onClick={() => selectSearchResult(r)}>
+                      <div className="search-result-name">{r.name || r.display_name.split(",")[0]}</div>
+                      <div className="search-result-addr">{r.display_name}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="map-overlay">
+            <div className="map-badge">
+              <strong>Click to drop pin</strong>
+              Right-click to wishlist ⭐
+            </div>
+            <button className={`clear-btn${showRoute ? " active-btn" : ""}`} onClick={() => setShowRoute((v) => !v)}>
+              {showRoute ? "✕ Hide route" : "⟶ Show route"}
+            </button>
+          </div>
+
+          {pending && (
+            <div className="pin-popup">
+              {pendingAsWish ? (
+                <>
+                  <div className="pin-popup-title">⭐ Add to Wishlist</div>
+                  <input className="pin-popup-input" autoFocus placeholder="Place name..." value={popupName}
+                    onChange={(e) => setPopupName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && confirmPin()} />
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <button className="pin-popup-btn secondary" onClick={() => setPending(null)}>Cancel</button>
+                    <button className="pin-popup-btn" onClick={confirmPin}>Save to Wishlist</button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="pin-popup-title" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span>📍 New Stop</span>
+                    <button className="wish-instead-btn" onClick={confirmAsWish}>★ Wishlist instead</button>
+                  </div>
+                  <input className="pin-popup-input" autoFocus placeholder="Place name..." value={popupName}
+                    onChange={(e) => setPopupName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && confirmPin()} />
+                  <div className="pin-popup-row">
+                    <label className="pin-popup-label">Time</label>
+                    <TimeInput value={popupTime} onChange={setPopupTime} />
+                  </div>
+                  <div className="pin-popup-row">
+                    <label className="pin-popup-label">Type</label>
+                    <select className="pin-popup-select" value={popupType} onChange={(e) => setPopupType(e.target.value)}>
+                      <option value="">Add Label</option>
+                      {STOP_TYPES.map((t) => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
+                    </select>
+                  </div>
+                  <select className="pin-popup-select" value={popupDay ?? ""} onChange={(e) => setPopupDay(+e.target.value)}>
+                    {days.map((d) => <option key={d.id} value={d.id}>{d.label} — {d.date}</option>)}
+                  </select>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <button className="pin-popup-btn secondary" onClick={() => setPending(null)}>Cancel</button>
+                    <button className="pin-popup-btn" onClick={confirmPin}>Add to Itinerary</button>
+                  </div>
+                </>
+              )}
+            </div>
           )}
         </div>
       </div>
+    </>
+  );
+}
 
-      <div className="map-area">
-        <div ref={mapRef} id="map" />
-        <div className="map-search-bar">
-          <div style={{ position: "relative", flex: 1 }}>
-            <form onSubmit={handleSearch} style={{ display: "flex", gap: 6 }}>
-              <input
-                className="map-search-input"
-                placeholder="Search a place..."
-                value={searchQuery}
-                onChange={(e) => { setSearchQuery(e.target.value); if (!e.target.value) setSearchResults([]); }}
-              />
-              <button className="map-search-btn" type="submit">{searchLoading ? "..." : "Search"}</button>
-            </form>
-            {(searchResults.length > 0 || searchError) && (
-              <div className="search-results-dropdown">
-                {searchError && <div className="search-error">{searchError}</div>}
-                {searchResults.map((r) => (
-                  <div key={r.place_id} className="search-result-item" onClick={() => selectSearchResult(r)}>
-                    <div className="search-result-name">{r.name || r.display_name.split(",")[0]}</div>
-                    <div className="search-result-addr">{r.display_name}</div>
-                  </div>
-                ))}
+// ── PlanMode ───────────────────────────────────────────────────
+
+function PlanMode({ days, pins, wishlist, onClose, onApply }) {
+  const [localDays, setLocalDays] = useState(() => days.map(d => ({ ...d, stops: [...d.stops] })));
+  const [localPins, setLocalPins] = useState(() => pins.map(p => ({ ...p })));
+  const [localWishlist, setLocalWishlist] = useState(() => wishlist.map(w => ({ ...w })));
+
+  const dragItem = useRef(null);
+  const [dragOver, setDragOver] = useState(null);
+
+  function getStopsForDay(day) {
+    return day.stops
+      .map(sid => localPins.find(p => p.id === sid))
+      .filter(Boolean)
+      .sort((a, b) => (a.time || "00:00").localeCompare(b.time || "00:00"));
+  }
+
+  function onDragStart(e, id, sourceDayId, type) {
+    dragItem.current = { id, sourceDayId, type };
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setDragImage(e.currentTarget, 20, 20);
+  }
+
+  function onDragOver(e, dayId, index) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    setDragOver({ dayId, index });
+  }
+
+  function onDragLeave() {
+    setDragOver(null);
+  }
+
+  function onDrop(e, targetDayId, insertIndex) {
+    e.preventDefault();
+    setDragOver(null);
+    if (!dragItem.current) return;
+
+    const { id, sourceDayId, type } = dragItem.current;
+    dragItem.current = null;
+
+    if (type === "wish") {
+      const wishItem = localWishlist.find(w => w.id === id);
+      if (!wishItem) return;
+      const newPin = {
+        id: wishItem.id, label: "?", name: wishItem.name,
+        time: "09:00", type: "activity", notes: "", cost: "",
+        lat: wishItem.lat ?? null, lng: wishItem.lng ?? null, dayId: targetDayId,
+      };
+      setLocalPins(prev => [...prev, newPin]);
+      setLocalDays(prev => prev.map(d => {
+        if (d.id !== targetDayId) return d;
+        const stops = [...d.stops];
+        stops.splice(insertIndex, 0, wishItem.id);
+        return { ...d, stops };
+      }));
+      setLocalWishlist(prev => prev.filter(w => w.id !== id));
+      return;
+    }
+
+    if (sourceDayId === targetDayId) {
+      setLocalDays(prev => prev.map(d => {
+        if (d.id !== targetDayId) return d;
+        const stops = d.stops.filter(sid => localPins.find(p => p.id === sid));
+        const currentIdx = stops.indexOf(id);
+        if (currentIdx === -1) return d;
+        const reordered = [...stops];
+        reordered.splice(currentIdx, 1);
+        const adjustedInsert = insertIndex > currentIdx ? insertIndex - 1 : insertIndex;
+        reordered.splice(adjustedInsert, 0, id);
+        return { ...d, stops: reordered };
+      }));
+    } else {
+      setLocalDays(prev => prev.map(d => {
+        if (d.id === sourceDayId) return { ...d, stops: d.stops.filter(sid => sid !== id) };
+        if (d.id === targetDayId) {
+          const stops = [...d.stops];
+          stops.splice(insertIndex, 0, id);
+          return { ...d, stops };
+        }
+        return d;
+      }));
+      setLocalPins(prev => prev.map(p => p.id === id ? { ...p, dayId: targetDayId } : p));
+    }
+  }
+
+  function onDropToWishlist(e) {
+    e.preventDefault();
+    setDragOver(null);
+    if (!dragItem.current) return;
+    const { id, type } = dragItem.current;
+    dragItem.current = null;
+    if (type === "wish") return;
+    const pin = localPins.find(p => p.id === id);
+    if (!pin) return;
+    const wishItem = { id: pin.id, name: pin.name, lat: pin.lat, lng: pin.lng };
+    setLocalWishlist(prev => [...prev, wishItem]);
+    setLocalPins(prev => prev.filter(p => p.id !== id));
+    setLocalDays(prev => prev.map(d => ({ ...d, stops: d.stops.filter(sid => sid !== id) })));
+  }
+
+  function handleApply() {
+    const newPins = reindexPins(localDays, localPins);
+    onApply(localDays, newPins, localWishlist);
+  }
+
+  return (
+    <div className="plan-overlay">
+      <div className="plan-header">
+        <div className="plan-header-left">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2v-4M9 21H5a2 2 0 0 1-2-2v-4m0 0h18"/>
+          </svg>
+          Order Stops
+        </div>
+        <div className="plan-header-right">
+          <span className="plan-hint">Drag stops between days · Drop wishlist items into a day</span>
+          <button className="plan-cancel-btn" onClick={onClose}>Cancel</button>
+          <button className="plan-apply-btn" onClick={handleApply}>Apply changes</button>
+        </div>
+      </div>
+
+      <div className="plan-body">
+        <div className="plan-days-grid">
+          {localDays.map((day, dayIdx) => {
+            const { accent, bg, border, stopBg, stopBorder } = generateDayColor(dayIdx);
+            const stops = getStopsForDay(day);
+            return (
+              <div
+                key={day.id}
+                className="plan-day-col"
+                style={{ background: bg, borderColor: border }}
+                onDragOver={(e) => onDragOver(e, day.id, stops.length)}
+                onDragLeave={onDragLeave}
+                onDrop={(e) => onDrop(e, day.id, stops.length)}
+              >
+                <div className="plan-day-title" style={{ color: accent }}>
+                  {day.label}
+                  <span style={{ color: "var(--muted)", fontWeight: 400, fontSize: 11, marginLeft: 6 }}>{day.date}</span>
+                </div>
+
+                <div className="plan-stops-list">
+                  {stops.length === 0 && (
+                    <div
+                      className={`plan-drop-zone${dragOver?.dayId === day.id ? " active" : ""}`}
+                      onDragOver={(e) => onDragOver(e, day.id, 0)}
+                      onDrop={(e) => onDrop(e, day.id, 0)}
+                    >
+                      Drop here
+                    </div>
+                  )}
+                  {stops.map((stop, idx) => (
+                    <div key={stop.id}>
+                      <div
+                        className={`plan-insert-zone${dragOver?.dayId === day.id && dragOver?.index === idx ? " active" : ""}`}
+                        onDragOver={(e) => { e.stopPropagation(); onDragOver(e, day.id, idx); }}
+                        onDrop={(e) => { e.stopPropagation(); onDrop(e, day.id, idx); }}
+                      />
+                      <div
+                        className="plan-stop-card"
+                        style={{ background: stopBg, borderColor: stopBorder }}
+                        draggable
+                        onDragStart={(e) => onDragStart(e, stop.id, day.id, "stop")}
+                        onDragOver={(e) => { e.stopPropagation(); onDragOver(e, day.id, idx + 1); }}
+                        onDrop={(e) => { e.stopPropagation(); onDrop(e, day.id, idx + 1); }}
+                      >
+                        <div className="plan-drag-handle" aria-hidden="true">
+                          <svg width="10" height="14" viewBox="0 0 10 14" fill="currentColor">
+                            <circle cx="3" cy="2" r="1.2"/><circle cx="7" cy="2" r="1.2"/>
+                            <circle cx="3" cy="7" r="1.2"/><circle cx="7" cy="7" r="1.2"/>
+                            <circle cx="3" cy="12" r="1.2"/><circle cx="7" cy="12" r="1.2"/>
+                          </svg>
+                        </div>
+                        <div className="plan-stop-num" style={{ background: accent }}>
+                          {stop.type === "flight" ? "✈️" : stop.type === "hotel" ? "🏨" : stop.type === "food" ? "🍜" : stop.label}
+                        </div>
+                        <div className="plan-stop-info">
+                          <div className="plan-stop-name">{stop.name}</div>
+                          <div className="plan-stop-meta">{stop.time} · {stop.type || "activity"}</div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  {stops.length > 0 && (
+                    <div
+                      className={`plan-insert-zone${dragOver?.dayId === day.id && dragOver?.index === stops.length ? " active" : ""}`}
+                      onDragOver={(e) => { e.stopPropagation(); onDragOver(e, day.id, stops.length); }}
+                      onDrop={(e) => { e.stopPropagation(); onDrop(e, day.id, stops.length); }}
+                    />
+                  )}
+                </div>
               </div>
-            )}
-          </div>
+            );
+          })}
         </div>
 
-        <div className="map-overlay">
-          <div className="map-badge">
-            <strong>Click to drop pin</strong>
-            Right-click to wishlist ⭐
-          </div>
-          <button className={`clear-btn${showRoute ? " active-btn" : ""}`} onClick={() => setShowRoute((v) => !v)}>
-            {showRoute ? "✕ Hide route" : "⟶ Show route"}
-          </button>
-        </div>
-
-        {pending && (
-          <div className="pin-popup">
-            {pendingAsWish ? (
-              <>
-                <div className="pin-popup-title">⭐ Add to Wishlist</div>
-                <input className="pin-popup-input" autoFocus placeholder="Place name..." value={popupName}
-                  onChange={(e) => setPopupName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && confirmPin()} />
-                <div style={{ display: "flex", gap: 6 }}>
-                  <button className="pin-popup-btn secondary" onClick={() => setPending(null)}>Cancel</button>
-                  <button className="pin-popup-btn" onClick={confirmPin}>Save to Wishlist</button>
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="pin-popup-title" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <span>📍 New Stop</span>
-                  <button className="wish-instead-btn" onClick={confirmAsWish}>★ Wishlist instead</button>
-                </div>
-                <input className="pin-popup-input" autoFocus placeholder="Place name..." value={popupName}
-                  onChange={(e) => setPopupName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && confirmPin()} />
-                <div className="pin-popup-row">
-                  <label className="pin-popup-label">Time</label>
-                  <TimeInput value={popupTime} onChange={setPopupTime} />
-                </div>
-                <div className="pin-popup-row">
-                  <label className="pin-popup-label">Type</label>
-                  <select className="pin-popup-select" value={popupType} onChange={(e) => setPopupType(e.target.value)}>
-                    <option value="">Add Label</option>
-                    {STOP_TYPES.map((t) => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
-                  </select>
-                </div>
-                <select className="pin-popup-select" value={popupDay ?? ""} onChange={(e) => setPopupDay(+e.target.value)}>
-                  {days.map((d) => <option key={d.id} value={d.id}>{d.label} — {d.date}</option>)}
-                </select>
-                <div style={{ display: "flex", gap: 6 }}>
-                  <button className="pin-popup-btn secondary" onClick={() => setPending(null)}>Cancel</button>
-                  <button className="pin-popup-btn" onClick={confirmPin}>Add to Itinerary</button>
-                </div>
-              </>
+        <div
+          className={`plan-wishlist-panel${dragOver?.dayId === "wishlist" ? " drag-over" : ""}`}
+          onDragOver={(e) => { e.preventDefault(); setDragOver({ dayId: "wishlist", index: 0 }); }}
+          onDragLeave={onDragLeave}
+          onDrop={onDropToWishlist}
+        >
+          <div className="plan-wishlist-title">⭐ Wishlist</div>
+          <div className="plan-wishlist-hint">Drag into a day to schedule · Drag stops here to unschedule</div>
+          <div className="plan-wishlist-list">
+            {localWishlist.length === 0 && (
+              <div className="plan-wish-empty">No wishlist items — drag stops here to unschedule them</div>
             )}
+            {localWishlist.map((w) => (
+              <div
+                key={w.id}
+                className="plan-wish-card"
+                draggable
+                onDragStart={(e) => onDragStart(e, w.id, "wishlist", "wish")}
+              >
+                <div className="plan-drag-handle" aria-hidden="true">
+                  <svg width="10" height="14" viewBox="0 0 10 14" fill="currentColor">
+                    <circle cx="3" cy="2" r="1.2"/><circle cx="7" cy="2" r="1.2"/>
+                    <circle cx="3" cy="7" r="1.2"/><circle cx="7" cy="7" r="1.2"/>
+                    <circle cx="3" cy="12" r="1.2"/><circle cx="7" cy="12" r="1.2"/>
+                  </svg>
+                </div>
+                <div className="plan-stop-num" style={{ background: "#FFD700" }}>★</div>
+                <div className="plan-stop-info">
+                  <div className="plan-stop-name">{w.name}</div>
+                  <div className="plan-stop-meta">wishlisted</div>
+                </div>
+              </div>
+            ))}
           </div>
-        )}
+        </div>
       </div>
     </div>
   );
 }
+
+// ── useIsMobile ────────────────────────────────────────────────
 
 function useIsMobile() {
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 900);
@@ -794,11 +1059,12 @@ function useIsMobile() {
   return isMobile;
 }
 
+// ── TimeInput ──────────────────────────────────────────────────
+
 function TimeInput({ value, onChange }) {
   const isMobile = useIsMobile();
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState(value);
-
   const ref = useRef(null);
 
   useEffect(() => {
@@ -829,8 +1095,8 @@ function TimeInput({ value, onChange }) {
       {open && (
         <div onClick={(e) => e.stopPropagation()} style={{
           ...(isMobile
-          ? { position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)", zIndex: 9999 }
-          : { position: "absolute", top: "calc(100% + 6px)", left: 0, zIndex: 999 }),
+            ? { position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)", zIndex: 9999 }
+            : { position: "absolute", top: "calc(100% + 6px)", left: 0, zIndex: 999 }),
           background: "#1e1e28", border: "1px solid rgba(255,255,255,0.12)",
           borderRadius: 10, padding: "12px 14px", display: "flex",
           flexDirection: "column", gap: 10, boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
@@ -892,12 +1158,7 @@ function DayBlock({ day, dayIdx, pins, highlighted, onFocus, onRemovePin, onRemo
           <input className="day-date-input" type="date" value={day.date} onChange={(e) => onDateChange(e.target.value)} />
         </div>
         <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
-          <button
-            className="btn-icon"
-            onClick={() => setCollapsed((v) => !v)}
-            title={collapsed ? "Expand" : "Collapse"}
-            style={{ fontSize: 14 }}
-          >
+          <button className="btn-icon" onClick={() => setCollapsed((v) => !v)} title={collapsed ? "Expand" : "Collapse"} style={{ fontSize: 14 }}>
             {collapsed ? "▶" : "▼"}
           </button>
           <button className="btn-icon" onClick={() => onRemoveDay(day.id)}>✕</button>

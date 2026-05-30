@@ -332,10 +332,36 @@ body {
   padding: 16px;
   display: flex;
   flex-direction: column;
-  /* important: allow natural content height so scroll works */
   min-height: 0;
   scrollbar-width: thin;
   scrollbar-color: var(--border2) transparent;
+}
+
+/* ─── ORDER STOPS BUTTON ───────────────────────────────── */
+
+.plan-mode-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  background: rgba(200,245,90,0.07);
+  border: 1.5px dashed rgba(200,245,90,0.35);
+  border-radius: 8px;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+  font-family: inherit;
+  padding: 8px 12px;
+  cursor: pointer;
+  letter-spacing: 0.04em;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+
+.plan-mode-btn:hover {
+  background: rgba(200,245,90,0.14);
+  border-color: var(--accent);
 }
 
 /* ─── DAY BLOCKS ───────────────────────────────────────── */
@@ -345,7 +371,6 @@ body {
   border-radius: var(--r);
   border: 1px solid var(--border);
   overflow: hidden;
-  /* background and border-color set inline per day */
   flex-shrink: 0;
 }
 
@@ -403,12 +428,11 @@ body {
   align-items: flex-start;
   gap: 10px;
   padding: 9px 10px;
-  background: var(--surface);
+  background: #1e1e28;
   border-radius: 8px;
   border: 1px solid var(--border);
   cursor: pointer;
   transition: border-color 0.15s;
-  /* prevent children from overflowing */
   min-width: 0;
 }
 
@@ -431,7 +455,6 @@ body {
   justify-content: center;
   flex-shrink: 0;
   margin-top: 2px;
-  /* background set inline per day */
 }
 
 .stop-name {
@@ -441,7 +464,6 @@ body {
   display: flex;
   align-items: center;
   gap: 4px;
-  /* allow wrapping on small screens */
   word-break: break-word;
   min-width: 0;
 }
@@ -479,20 +501,6 @@ body {
   flex-wrap: wrap;
   min-width: 0;
 }
-
-.time-input {
-  background: none;
-  border: none;
-  color: var(--muted);
-  font-size: 11px;
-  font-family: 'DM Mono', monospace;
-  outline: none;
-  cursor: pointer;
-  padding: 0;
-  flex-shrink: 0;
-}
-
-.time-input:hover { color: var(--accent); }
 
 .type-select {
   background: #2a2a36;
@@ -566,6 +574,7 @@ body {
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
+  align-items: center;
 }
 
 .add-stop-input {
@@ -583,21 +592,6 @@ body {
 
 .add-stop-input:focus { border-color: var(--accent); }
 .add-stop-input::placeholder { color: var(--muted); }
-
-.add-time-input {
-  background: var(--surface);
-  border: 1px solid var(--border2);
-  border-radius: 8px;
-  padding: 7px 8px;
-  color: var(--text);
-  font-size: 12px;
-  font-family: inherit;
-  outline: none;
-  width: 100px;
-  flex-shrink: 0;
-}
-
-.add-time-input:focus { border-color: var(--accent); }
 
 .add-type-select {
   background: var(--surface);
@@ -1014,6 +1008,301 @@ body {
 
 .leaflet-container { background: #e8e0d8 !important; }
 
+/* ─── PLAN MODE OVERLAY ────────────────────────────────── */
+
+.plan-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.plan-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border2);
+  flex-shrink: 0;
+  gap: 16px;
+}
+
+.plan-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+  flex-shrink: 0;
+}
+
+.plan-header-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.plan-hint {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.plan-cancel-btn {
+  background: none;
+  border: 1px solid var(--border2);
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  padding: 7px 14px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.plan-cancel-btn:hover {
+  color: var(--text);
+  border-color: rgba(255,255,255,0.3);
+}
+
+.plan-apply-btn {
+  background: var(--accent);
+  color: var(--accent-text);
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  font-family: inherit;
+  padding: 7px 16px;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.plan-apply-btn:hover { opacity: 0.85; }
+
+/* ─── PLAN BODY ────────────────────────────────────────── */
+
+.plan-body {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+  min-height: 0;
+}
+
+/*
+  Days grid — wraps into multiple rows when there are many days.
+  Each column is a fixed width; when they exceed the available width
+  they wrap naturally. The whole grid area scrolls vertically.
+*/
+.plan-days-grid {
+  flex: 1;
+  display: flex;
+  flex-wrap: wrap;         /* ← key: wrap columns to next row */
+  gap: 12px;
+  padding: 16px;
+  overflow-y: auto;        /* vertical scroll for many days */
+  overflow-x: hidden;
+  align-content: flex-start;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border2) transparent;
+}
+
+.plan-day-col {
+  flex: 0 0 220px;
+  min-width: 220px;
+  max-width: 220px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  padding: 12px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  /* no max-height — let it grow naturally when wrapping */
+}
+
+.plan-day-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+  flex-shrink: 0;
+}
+
+.plan-stops-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+
+.plan-drop-zone {
+  border: 1.5px dashed rgba(255,255,255,0.15);
+  border-radius: 7px;
+  padding: 18px 10px;
+  text-align: center;
+  font-size: 11px;
+  color: var(--muted);
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.plan-drop-zone.active {
+  border-color: var(--accent);
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+
+.plan-insert-zone {
+  height: 6px;
+  border-radius: 3px;
+  transition: height 0.12s, background 0.12s;
+}
+
+.plan-insert-zone.active {
+  height: 22px;
+  background: var(--accent-dim);
+  border: 1.5px dashed rgba(200,245,90,0.5);
+  border-radius: 6px;
+}
+
+.plan-stop-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  border-radius: 7px;
+  border: 1px solid rgba(255,255,255,0.1);
+  cursor: grab;
+  transition: border-color 0.12s, transform 0.12s;
+  user-select: none;
+}
+
+.plan-stop-card:hover {
+  border-color: rgba(255,255,255,0.25);
+  transform: translateY(-1px);
+}
+
+.plan-stop-card:active { cursor: grabbing; }
+
+.plan-drag-handle {
+  color: rgba(255,255,255,0.2);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+}
+
+.plan-stop-num {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  color: #0f0f13;
+  font-size: 9px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.plan-stop-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.plan-stop-name {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.plan-stop-meta {
+  font-size: 10px;
+  color: var(--muted);
+  margin-top: 1px;
+}
+
+/* ─── WISHLIST PANEL ───────────────────────────────────── */
+
+.plan-wishlist-panel {
+  width: 220px;
+  flex-shrink: 0;
+  background: rgba(255,215,0,0.04);
+  border-left: 1px solid rgba(255,215,0,0.15);
+  display: flex;
+  flex-direction: column;
+  padding: 16px 12px;
+  gap: 8px;
+  overflow-y: auto;
+  transition: background 0.15s;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,215,0,0.1) transparent;
+}
+
+.plan-wishlist-panel.drag-over {
+  background: rgba(255,215,0,0.1);
+  border-left-color: rgba(255,215,0,0.4);
+}
+
+.plan-wishlist-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #FFD700;
+  flex-shrink: 0;
+}
+
+.plan-wishlist-hint {
+  font-size: 10px;
+  color: var(--muted);
+  line-height: 1.4;
+  flex-shrink: 0;
+}
+
+.plan-wishlist-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  flex: 1;
+}
+
+.plan-wish-empty {
+  font-size: 11px;
+  color: var(--muted);
+  padding: 8px 2px;
+  line-height: 1.4;
+}
+
+.plan-wish-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  border-radius: 7px;
+  background: rgba(255,215,0,0.06);
+  border: 1px solid rgba(255,215,0,0.18);
+  cursor: grab;
+  transition: border-color 0.12s, transform 0.12s;
+  user-select: none;
+}
+
+.plan-wish-card:hover {
+  border-color: rgba(255,215,0,0.4);
+  transform: translateY(-1px);
+}
+
+.plan-wish-card:active { cursor: grabbing; }
+
 /* ─── MOBILE ───────────────────────────────────────────── */
 
 @media (max-width: 900px) {
@@ -1030,10 +1319,9 @@ body {
     overflow: hidden;
   }
 
-  /* Map takes top 50% */
   .map-area {
-    flex: 0 0 44%;
-    height: 44dvh;
+    flex: 0 0 40%;
+    height: 40dvh;
     min-height: 0;
     position: relative;
   }
@@ -1043,10 +1331,9 @@ body {
     height: 100%;
   }
 
-  /* Sidebar takes bottom 50%, scrollable */
   .sidebar {
-    flex: 0 0 56%;
-    height: 56dvh;
+    flex: 0 0 60%;
+    height: 60dvh;
     min-height: 0;
     border-right: none;
     border-top: 1px solid var(--border);
@@ -1068,7 +1355,6 @@ body {
   }
 
   .tabs { padding: 8px 12px 0; }
-
   .tab { font-size: 12px; padding: 6px; }
 
   .sidebar-body {
@@ -1079,13 +1365,14 @@ body {
     -webkit-overflow-scrolling: touch;
   }
 
-  /* Day blocks — make stops fully visible */
+  .plan-mode-btn {
+    font-size: 11px;
+    padding: 7px 10px;
+  }
+
   .day-block { margin-bottom: 10px; }
-
   .day-header { padding: 10px 12px; }
-
   .day-label { font-size: 10px; }
-
   .day-date-input { font-size: 12px; }
 
   .stops-list { padding: 0 10px 6px; gap: 5px; }
@@ -1096,7 +1383,6 @@ body {
     align-items: flex-start;
   }
 
-  /* Allow the inner content to expand fully */
   .stop-item > div:nth-child(2) {
     flex: 1;
     min-width: 0;
@@ -1116,15 +1402,7 @@ body {
     flex-shrink: 0;
   }
 
-  .stop-meta {
-    gap: 4px;
-    flex-wrap: wrap;
-  }
-
-  .time-input {
-    font-size: 10px;
-    min-width: 0;
-  }
+  .stop-meta { gap: 4px; flex-wrap: wrap; }
 
   .type-select {
     font-size: 9px;
@@ -1133,7 +1411,6 @@ body {
 
   .stop-notes { font-size: 10px; }
 
-  /* Add stop row — stack on mobile */
   .add-stop-row {
     padding: 0 10px 10px;
     flex-wrap: wrap;
@@ -1144,13 +1421,6 @@ body {
     flex: 1 1 100%;
     font-size: 12px;
     padding: 6px 8px;
-  }
-
-  .add-time-input {
-    width: 90px;
-    font-size: 11px;
-    padding: 6px 6px;
-    flex: 0 0 auto;
   }
 
   .add-type-select {
@@ -1170,50 +1440,88 @@ body {
     font-size: 12px;
   }
 
-  /* Map overlay — compact on mobile */
   .map-overlay {
     top: 8px;
     right: 8px;
     gap: 5px;
   }
 
-  .map-badge {
-    padding: 5px 8px;
-    font-size: 10px;
-  }
+  .map-badge { padding: 5px 8px; font-size: 10px; }
+  .clear-btn { padding: 5px 8px; font-size: 10px; }
 
-  .clear-btn {
-    padding: 5px 8px;
-    font-size: 10px;
-  }
-
-  /* Search bar full width */
   .map-search-bar {
     width: calc(100% - 130px);
     left: 8px;
     top: 8px;
   }
 
-  .map-search-input {
-    padding: 7px 10px;
-    font-size: 12px;
-  }
+  .map-search-input { padding: 7px 10px; font-size: 12px; }
+  .map-search-btn { padding: 7px 10px; font-size: 12px; }
 
-  .map-search-btn {
-    padding: 7px 10px;
-    font-size: 12px;
-  }
-
-  /* Pin popup */
   .pin-popup {
     width: calc(100vw - 32px);
     bottom: 16px;
     max-width: 340px;
   }
 
-  /* Trip menu */
   .trip-menu {
     width: 92vw;
     max-height: 85vh;
+  }
+
+  /* ─── PLAN MODE MOBILE ─────────────────────────────── */
+
+  .plan-overlay {
+    overflow-y: auto;
+  }
+
+  .plan-header {
+    padding: 10px 14px;
+    flex-wrap: wrap;
+    gap: 8px;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+
+  .plan-hint { display: none; }
+
+  .plan-body {
+    flex-direction: column;
+    overflow: visible;        /* let the overlay scroll */
+    min-height: 0;
+  }
+
+  /*
+    On mobile the days wrap just like desktop but with smaller cards
+    so 2 columns usually fit. The whole overlay scrolls vertically.
+  */
+  .plan-days-grid {
+    flex: none;
+    overflow: visible;
+    padding: 12px;
+    gap: 10px;
+    align-content: flex-start;
+  }
+
+  .plan-day-col {
+    flex: 0 0 calc(50% - 5px);  /* 2 columns on mobile */
+    min-width: 0;
+    max-width: none;
+  }
+
+  /* On very narrow screens (< 400px) fall back to single column */
+  @media (max-width: 400px) {
+    .plan-day-col {
+      flex: 0 0 100%;
+    }
+  }
+
+  .plan-wishlist-panel {
+    width: 100%;
+    border-left: none;
+    border-top: 1px solid rgba(255,215,0,0.15);
+    max-height: none;
+    padding: 12px;
   }
 }
